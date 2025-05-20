@@ -11,13 +11,15 @@ import 'package:signik/services/pdf_service.dart';
 import 'package:signik/services/qr_service.dart';
 import 'package:signik/ui/qr_display.dart';
 import 'package:signik/ui/qr_scanner.dart';
+import 'package:signik/ui/windows_home.dart';
+import 'package:signik/ui/android_home.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const SignikApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class SignikApp extends StatelessWidget {
+  const SignikApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +29,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(),
+      home: Platform.isWindows ? const WindowsHome() : const AndroidHome(),
     );
   }
 }

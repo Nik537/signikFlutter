@@ -30,26 +30,35 @@ class _WindowsHomeState extends State<WindowsHome> {
   }
 
   Future<void> _initializeServices() async {
-    // Get the user's documents directory for watching
-    final documentsDir = Directory('${Platform.environment['USERPROFILE']}\\Documents');
-    _fileService = FileService(watchDirectory: documentsDir.path);
+    try {
+      // Get the user's documents directory for watching
+      final documentsDir = Directory('${Platform.environment['USERPROFILE']}\\Documents');
+      if (!await documentsDir.exists()) {
+        await documentsDir.create(recursive: true);
+      }
+      _fileService = FileService(watchDirectory: documentsDir.path);
 
-    // Start WebSocket server
-    await _webSocketService.startServer();
+      // Start WebSocket server
+      await _webSocketService.startServer();
 
-    // Listen for connections
-    _webSocketService.onConnection.listen((connected) {
-      setState(() {
-        _isConnected = connected;
-        _status = connected ? 'Phone connected' : 'Waiting for phone...';
+      // Listen for connections
+      _webSocketService.onConnection.listen((connected) {
+        setState(() {
+          _isConnected = connected;
+          _status = connected ? 'Phone connected' : 'Waiting for phone...';
+        });
       });
-    });
 
-    // Listen for file changes
-    _fileService.onFileChanged.listen(_handleFileChanged);
+      // Listen for file changes
+      _fileService.onFileChanged.listen(_handleFileChanged);
 
-    // Listen for messages
-    _webSocketService.onMessage.listen(_handleMessage);
+      // Listen for messages
+      _webSocketService.onMessage.listen(_handleMessage);
+    } catch (e) {
+      setState(() {
+        _status = 'Error initializing services: $e';
+      });
+    }
   }
 
   Future<void> _handleFileChanged(File file) async {

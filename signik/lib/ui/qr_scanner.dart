@@ -23,31 +23,11 @@ class _QrScannerState extends State<QrScanner> {
         title: const Text('Scan QR Code'),
         actions: [
           IconButton(
-            icon: ValueListenableBuilder(
-              valueListenable: _controller.torchState,
-              builder: (context, state, child) {
-                switch (state) {
-                  case TorchState.off:
-                    return const Icon(Icons.flash_off);
-                  case TorchState.on:
-                    return const Icon(Icons.flash_on);
-                }
-              },
-            ),
+            icon: const Icon(Icons.flash_on),
             onPressed: () => _controller.toggleTorch(),
           ),
           IconButton(
-            icon: ValueListenableBuilder(
-              valueListenable: _controller.cameraFacingState,
-              builder: (context, state, child) {
-                switch (state) {
-                  case CameraFacing.front:
-                    return const Icon(Icons.camera_front);
-                  case CameraFacing.back:
-                    return const Icon(Icons.camera_rear);
-                }
-              },
-            ),
+            icon: const Icon(Icons.camera_rear),
             onPressed: () => _controller.switchCamera(),
           ),
         ],
