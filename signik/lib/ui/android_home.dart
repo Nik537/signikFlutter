@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
-import 'package:signature/signature.dart';
-import '../services/websocket_service.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import '../services/pdf_service.dart';
+import '../services/signature_service.dart';
 
 class AndroidHome extends StatefulWidget {
   const AndroidHome({super.key});
@@ -13,89 +14,108 @@ class AndroidHome extends StatefulWidget {
 }
 
 class _AndroidHomeState extends State<AndroidHome> {
-  final _webSocketService = WebSocketService();
-  final _signatureController = SignatureController(
-    penStrokeWidth: 5,
-    penColor: Colors.black,
-    exportBackgroundColor: Colors.white,
-  );
-  
+  final _pdfService = PdfService();
+  final _signatureService = SignatureService();
+  WebSocketChannel? _channel;
   bool _isConnected = false;
-  String _status = 'Connecting...';
-  Uint8List? _pdfBytes;
-  Uint8List? _signedPdfBytes;
+  String _status = 'Waiting for PDF...';
+  Uint8List? _currentPdfBytes;
   String? _currentFileName;
-  bool _isSigned = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeWebSocket();
+    _connectToServer();
   }
 
-  Future<void> _initializeWebSocket() async {
-    // TODO: Implement QR code scanning or UDP broadcast discovery
-    // For now, hardcode the WebSocket URL
-    const wsUrl = 'ws://192.168.1.100:9000'; // Replace with actual PC IP
-    
+  Future<void> _connectToServer() async {
     try {
-      await _webSocketService.connect(wsUrl);
-      _webSocketService.onMessage.listen(_handleMessage);
+      // Try to connect to the Windows app
+      final wsUrl = Uri.parse('ws://192.168.1.100:48978');
+      _channel = WebSocketChannel.connect(wsUrl);
+      
+      _channel!.stream.listen(
+        (data) {
+          if (data is String) {
+            final message = jsonDecode(data);
+            if (message['type'] == 'sendStart') {
+              setState(() {
+                _currentFileName = message['name'];
+                _status = 'Receiving PDF...';
+              });
+            } else if (message['type'] == 'signedComplete') {
+              setState(() {
+                _status = 'PDF signed successfully';
+              });
+            }
+          } else if (data is List<int>) {
+            if (_currentFileName == null) {
+              setState(() {
+                _status = 'Error: Received data before filename';
+              });
+              return;
+            }
+            
+            _currentPdfBytes = Uint8List.fromList(data);
+            _showSignatureDialog();
+          }
+        },
+        onDone: () {
+          setState(() {
+            _isConnected = false;
+            _status = 'Connection lost. Reconnecting...';
+          });
+          _reconnect();
+        },
+        onError: (error) {
+          print('WebSocket error: $error');
+          setState(() {
+            _isConnected = false;
+            _status = 'Connection error: $error';
+          });
+          _reconnect();
+        },
+      );
+
       setState(() {
         _isConnected = true;
-        _status = 'Connected to PC';
+        _status = 'Connected to Windows app';
       });
     } catch (e) {
+      print('Error connecting to WebSocket: $e');
       setState(() {
+        _isConnected = false;
         _status = 'Connection failed: $e';
       });
+      _reconnect();
     }
   }
 
-  void _handleMessage(dynamic data) {
-    if (data is Map<String, dynamic>) {
-      if (data['type'] == 'sendStart') {
-        setState(() {
-          _currentFileName = data['name'];
-          _status = 'Receiving $_currentFileName...';
-          _isSigned = false;
-          _signedPdfBytes = null;
-        });
-      } else if (data['type'] == 'signedComplete') {
-        setState(() {
-          _status = 'Receiving signed PDF...';
-        });
+  void _reconnect() {
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!_isConnected) {
+        _connectToServer();
       }
-    } else if (data is Uint8List) {
-      if (_signedPdfBytes == null && _isSigned) {
-        setState(() {
-          _signedPdfBytes = data;
-          _status = 'Signed PDF received';
-        });
-      } else {
-        setState(() {
-          _pdfBytes = data;
-          _status = 'PDF received. Ready to sign.';
-        });
-      }
-    }
+    });
   }
 
-  Future<void> _sendSignature() async {
-    if (_pdfBytes == null) return;
+  Future<void> _showSignatureDialog() async {
+    if (_currentPdfBytes == null) return;
 
-    final signatureBytes = await _signatureController.toPngBytes();
-    if (signatureBytes == null) {
-      setState(() => _status = 'Failed to generate signature');
+    final signature = await _signatureService.getSignature(context);
+    if (signature == null) {
+      setState(() => _status = 'Signature cancelled');
       return;
     }
 
-    setState(() {
-      _status = 'Sending signature...';
-      _isSigned = true;
-    });
-    await _webSocketService.sendData(signatureBytes);
-    _signatureController.clear();
+    setState(() => _status = 'Sending signature...');
+    
+    try {
+      // Send the signature back to Windows
+      _channel?.sink.add(signature);
+    } catch (e) {
+      setState(() => _status = 'Error sending signature: $e');
+    }
   }
 
   @override
@@ -111,74 +131,30 @@ class _AndroidHomeState extends State<AndroidHome> {
           const SizedBox(width: 16),
         ],
       ),
-      body: Column(
-        children: [
-          if (_signedPdfBytes != null) ...[
-            Expanded(
-              child: SfPdfViewer.memory(
-                _signedPdfBytes!,
-                canShowScrollHead: false,
-                canShowScrollStatus: false,
-              ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.phone_android,
+              size: 64,
+              color: _isConnected ? Colors.green : Colors.grey,
             ),
-          ] else if (_pdfBytes != null) ...[
-            Expanded(
-              child: SfPdfViewer.memory(
-                _pdfBytes!,
-                canShowScrollHead: false,
-                canShowScrollStatus: false,
-              ),
+            const SizedBox(height: 16),
+            Text(
+              _status,
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
             ),
-            const Divider(height: 1),
-            Container(
-              height: 200,
-              color: Colors.white,
-              child: Signature(
-                controller: _signatureController,
-                backgroundColor: Colors.white,
-              ),
-            ),
-          ] else
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.description,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Waiting for PDF...',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _status,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
-      floatingActionButton: _pdfBytes != null && !_isSigned
-          ? FloatingActionButton.extended(
-              onPressed: _sendSignature,
-              label: const Text('Sign & Send'),
-              icon: const Icon(Icons.send),
-            )
-          : null,
     );
   }
 
   @override
   void dispose() {
-    _webSocketService.dispose();
-    _signatureController.dispose();
+    _channel?.sink.close();
     super.dispose();
   }
 } 
