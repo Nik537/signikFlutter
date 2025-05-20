@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import '../services/websocket_service.dart';
 import '../services/file_service.dart';
+import '../services/pdf_service.dart';
 
 class WindowsHome extends StatefulWidget {
   const WindowsHome({super.key});
@@ -13,10 +15,13 @@ class WindowsHome extends StatefulWidget {
 
 class _WindowsHomeState extends State<WindowsHome> {
   final _webSocketService = WebSocketService();
-  late final FileService _fileService;
+  late FileService _fileService;
+  final _pdfService = PdfService();
   bool _isConnected = false;
   bool _isDragging = false;
   String _status = 'Waiting for PDF...';
+  File? _currentFile;
+  Uint8List? _currentPdfBytes;
 
   @override
   void initState() {
@@ -42,6 +47,9 @@ class _WindowsHomeState extends State<WindowsHome> {
 
     // Listen for file changes
     _fileService.onFileChanged.listen(_handleFileChanged);
+
+    // Listen for messages
+    _webSocketService.onMessage.listen(_handleMessage);
   }
 
   Future<void> _handleFileChanged(File file) async {
@@ -50,17 +58,49 @@ class _WindowsHomeState extends State<WindowsHome> {
       return;
     }
 
-    setState(() => _status = 'Processing ${file.path}...');
+    setState(() {
+      _currentFile = file;
+      _status = 'Processing ${file.path}...';
+    });
     
     try {
       final bytes = await _fileService.readFile(file);
+      _currentPdfBytes = Uint8List.fromList(bytes);
       await _webSocketService.sendData({
         'type': 'sendStart',
         'name': file.path.split(Platform.pathSeparator).last,
       });
-      await _webSocketService.sendData(bytes);
+      await _webSocketService.sendData(_currentPdfBytes!);
     } catch (e) {
       setState(() => _status = 'Error: $e');
+    }
+  }
+
+  Future<void> _handleMessage(dynamic data) async {
+    if (data is Uint8List && _currentFile != null && _currentPdfBytes != null) {
+      setState(() => _status = 'Embedding signature...');
+      
+      try {
+        // Embed the signature
+        final signedPdfBytes = await _pdfService.embedSignature(
+          _currentPdfBytes!,
+          data,
+        );
+        
+        // Save the signed PDF
+        await _fileService.writeFile(_currentFile!, signedPdfBytes);
+        
+        // Send the signed PDF back to Android
+        await _webSocketService.sendData({
+          'type': 'signedComplete',
+          'name': _currentFile!.path.split(Platform.pathSeparator).last,
+        });
+        await _webSocketService.sendData(signedPdfBytes);
+        
+        setState(() => _status = 'PDF signed and saved');
+      } catch (e) {
+        setState(() => _status = 'Error embedding signature: $e');
+      }
     }
   }
 

@@ -23,7 +23,9 @@ class _AndroidHomeState extends State<AndroidHome> {
   bool _isConnected = false;
   String _status = 'Connecting...';
   Uint8List? _pdfBytes;
+  Uint8List? _signedPdfBytes;
   String? _currentFileName;
+  bool _isSigned = false;
 
   @override
   void initState() {
@@ -51,16 +53,31 @@ class _AndroidHomeState extends State<AndroidHome> {
   }
 
   void _handleMessage(dynamic data) {
-    if (data is Map<String, dynamic> && data['type'] == 'sendStart') {
-      setState(() {
-        _currentFileName = data['name'];
-        _status = 'Receiving $_currentFileName...';
-      });
+    if (data is Map<String, dynamic>) {
+      if (data['type'] == 'sendStart') {
+        setState(() {
+          _currentFileName = data['name'];
+          _status = 'Receiving $_currentFileName...';
+          _isSigned = false;
+          _signedPdfBytes = null;
+        });
+      } else if (data['type'] == 'signedComplete') {
+        setState(() {
+          _status = 'Receiving signed PDF...';
+        });
+      }
     } else if (data is Uint8List) {
-      setState(() {
-        _pdfBytes = data;
-        _status = 'PDF received. Ready to sign.';
-      });
+      if (_signedPdfBytes == null && _isSigned) {
+        setState(() {
+          _signedPdfBytes = data;
+          _status = 'Signed PDF received';
+        });
+      } else {
+        setState(() {
+          _pdfBytes = data;
+          _status = 'PDF received. Ready to sign.';
+        });
+      }
     }
   }
 
@@ -73,7 +90,10 @@ class _AndroidHomeState extends State<AndroidHome> {
       return;
     }
 
-    setState(() => _status = 'Sending signature...');
+    setState(() {
+      _status = 'Sending signature...';
+      _isSigned = true;
+    });
     await _webSocketService.sendData(signatureBytes);
     _signatureController.clear();
   }
@@ -93,7 +113,15 @@ class _AndroidHomeState extends State<AndroidHome> {
       ),
       body: Column(
         children: [
-          if (_pdfBytes != null) ...[
+          if (_signedPdfBytes != null) ...[
+            Expanded(
+              child: SfPdfViewer.memory(
+                _signedPdfBytes!,
+                canShowScrollHead: false,
+                canShowScrollStatus: false,
+              ),
+            ),
+          ] else if (_pdfBytes != null) ...[
             Expanded(
               child: SfPdfViewer.memory(
                 _pdfBytes!,
@@ -137,7 +165,7 @@ class _AndroidHomeState extends State<AndroidHome> {
             ),
         ],
       ),
-      floatingActionButton: _pdfBytes != null
+      floatingActionButton: _pdfBytes != null && !_isSigned
           ? FloatingActionButton.extended(
               onPressed: _sendSignature,
               label: const Text('Sign & Send'),
