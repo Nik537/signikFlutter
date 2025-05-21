@@ -2,99 +2,107 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:network_info_plus/network_info_plus.dart';
 
 class WebSocketService {
   HttpServer? _server;
-  WebSocket? _socket;
-  final _connectionController = StreamController<bool>.broadcast();
-  final _messageController = StreamController<dynamic>.broadcast();
-  final _info = NetworkInfo();
-  String? _localIp;
+  WebSocket? _client;
+  WebSocket? _connection;
+  final _port = 9000;
+  final _onMessageController = StreamController<dynamic>.broadcast();
+  final _onConnectionController = StreamController<bool>.broadcast();
 
-  Stream<bool> get onConnection => _connectionController.stream;
-  Stream<dynamic> get onMessage => _messageController.stream;
+  Stream<dynamic> get onMessage => _onMessageController.stream;
+  Stream<bool> get onConnection => _onConnectionController.stream;
+  int get port => _port;
 
   Future<void> startServer() async {
     try {
-      // Get the local IP address
-      _localIp = await _info.getWifiIP();
-      if (_localIp == null) {
-        throw Exception('Could not determine local IP address');
-      }
-
-      // Start the server
-      _server = await HttpServer.bind(InternetAddress.anyIPv4, 48978);
-      print('WebSocket server started on $_localIp:48978');
-
-      // Handle incoming connections
-      _server!.listen((HttpRequest request) {
-        if (WebSocketTransformer.isUpgradeRequest(request)) {
-          WebSocketTransformer.upgrade(request).then((WebSocket ws) {
-            _handleConnection(ws);
-          });
-        }
-      });
-
-      _connectionController.add(false);
+      _server = await HttpServer.bind(InternetAddress.anyIPv4, _port);
+      _server!.listen(_handleConnection);
+      print('WebSocket server started on ws://${await getLocalIp()}:$_port');
     } catch (e) {
-      print('Error starting WebSocket server: $e');
-      _connectionController.addError(e);
+      print('Failed to start WebSocket server: $e');
       rethrow;
     }
   }
 
-  void _handleConnection(WebSocket ws) {
-    _socket = ws;
-    _connectionController.add(true);
+  Future<void> connect(String url) async {
+    try {
+      _connection = await WebSocket.connect(url);
+      _connection!.listen(
+        (data) => _onMessageController.add(data),
+        onDone: () {
+          _connection = null;
+          _onConnectionController.add(false);
+        },
+        onError: (error) {
+          print('WebSocket error: $error');
+          _connection = null;
+          _onConnectionController.add(false);
+        },
+      );
+      _onConnectionController.add(true);
+    } catch (e) {
+      print('Failed to connect to WebSocket: $e');
+      rethrow;
+    }
+  }
 
-    ws.listen(
-      (data) {
-        try {
-          if (data is String) {
-            _messageController.add(jsonDecode(data));
-          } else {
-            _messageController.add(data);
-          }
-        } catch (e) {
-          print('Error handling message: $e');
-        }
-      },
-      onDone: () {
-        _socket = null;
-        _connectionController.add(false);
-      },
-      onError: (error) {
-        print('WebSocket error: $error');
-        _socket = null;
-        _connectionController.add(false);
-      },
-    );
+  void _handleConnection(HttpRequest request) {
+    if (WebSocketTransformer.isUpgradeRequest(request)) {
+      WebSocketTransformer.upgrade(request).then((WebSocket ws) {
+        _client = ws;
+        _onConnectionController.add(true);
+        
+        ws.listen(
+          (data) => _onMessageController.add(data),
+          onDone: () {
+            _client = null;
+            _onConnectionController.add(false);
+          },
+          onError: (error) {
+            print('WebSocket error: $error');
+            _client = null;
+            _onConnectionController.add(false);
+          },
+        );
+      });
+    }
   }
 
   Future<void> sendData(dynamic data) async {
-    if (_socket == null) {
-      throw Exception('No active connection');
-    }
-
-    try {
-      if (data is Map) {
-        _socket!.add(jsonEncode(data));
+    if (_client != null) {
+      if (data is List<int>) {
+        _client!.add(data);
       } else {
-        _socket!.add(data);
+        _client!.add(jsonEncode(data));
       }
-    } catch (e) {
-      print('Error sending data: $e');
-      rethrow;
+    } else if (_connection != null) {
+      if (data is List<int>) {
+        _connection!.add(data);
+      } else {
+        _connection!.add(jsonEncode(data));
+      }
     }
   }
 
-  String? get localIp => _localIp;
+  Future<String> getLocalIp() async {
+    final interfaces = await NetworkInterface.list();
+    for (var interface in interfaces) {
+      for (var addr in interface.addresses) {
+        if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+          return addr.address;
+        }
+      }
+    }
+    return '127.0.0.1';
+  }
 
-  void dispose() {
-    _socket?.close();
-    _server?.close();
-    _connectionController.close();
-    _messageController.close();
+  Future<void> dispose() async {
+    await _onMessageController.close();
+    await _onConnectionController.close();
+    await _client?.close();
+    await _connection?.close();
+    await _server?.close();
   }
 } 

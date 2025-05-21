@@ -5,6 +5,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import '../services/websocket_service.dart';
 import '../services/file_service.dart';
 import '../services/pdf_service.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 class WindowsHome extends StatefulWidget {
   const WindowsHome({super.key});
@@ -22,6 +23,7 @@ class _WindowsHomeState extends State<WindowsHome> {
   String _status = 'Waiting for PDF...';
   File? _currentFile;
   Uint8List? _currentPdfBytes;
+  final List<File> _signedDocuments = [];
 
   @override
   void initState() {
@@ -88,24 +90,28 @@ class _WindowsHomeState extends State<WindowsHome> {
   Future<void> _handleMessage(dynamic data) async {
     if (data is Uint8List && _currentFile != null && _currentPdfBytes != null) {
       setState(() => _status = 'Embedding signature...');
-      
       try {
         // Embed the signature
         final signedPdfBytes = await _pdfService.embedSignature(
           _currentPdfBytes!,
           data,
         );
-        
         // Save the signed PDF
-        await _fileService.writeFile(_currentFile!, signedPdfBytes);
-        
+        final signedPath = _fileService.getSignedPath(_currentFile!.path);
+        final signedFile = File(signedPath);
+        await signedFile.writeAsBytes(signedPdfBytes);
+        // Add to signed documents list
+        setState(() {
+          if (!_signedDocuments.any((f) => f.path == signedFile.path)) {
+            _signedDocuments.add(signedFile);
+          }
+        });
         // Send the signed PDF back to Android
         await _webSocketService.sendData({
           'type': 'signedComplete',
           'name': _currentFile!.path.split(Platform.pathSeparator).last,
         });
         await _webSocketService.sendData(signedPdfBytes);
-        
         setState(() => _status = 'PDF signed and saved');
       } catch (e) {
         setState(() => _status = 'Error embedding signature: $e');
@@ -126,45 +132,138 @@ class _WindowsHomeState extends State<WindowsHome> {
           const SizedBox(width: 16),
         ],
       ),
-      body: DropTarget(
-        onDragDone: (details) {
-          for (final file in details.files) {
-            if (file.path.toLowerCase().endsWith('.pdf')) {
-              _handleFileChanged(File(file.path));
-            }
-          }
-        },
-        onDragEntered: (details) {
-          setState(() => _isDragging = true);
-        },
-        onDragExited: (details) {
-          setState(() => _isDragging = false);
-        },
-        child: Container(
-          color: _isDragging ? Colors.blue.withOpacity(0.1) : null,
-          child: Center(
+      body: Row(
+        children: [
+          // Main content (drag-and-drop area)
+          Expanded(
+            flex: 2,
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.upload_file,
-                  size: 64,
-                  color: _isDragging ? Colors.blue : Colors.grey,
+                // Connection info panel
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  color: Colors.grey[100],
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Server running at:',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 4),
+                            FutureBuilder<String>(
+                              future: _webSocketService.getLocalIp(),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  'IP: ${snapshot.data ?? "Loading..."}',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                );
+                              },
+                            ),
+                            Text(
+                              'Port: ${_webSocketService.port}',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  _isDragging ? 'Drop PDF here' : 'Drag and drop PDF here',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _status,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                // Main drag-and-drop area
+                Expanded(
+                  child: DropTarget(
+                    onDragDone: (details) {
+                      for (final file in details.files) {
+                        if (file.path.toLowerCase().endsWith('.pdf')) {
+                          _handleFileChanged(File(file.path));
+                        }
+                      }
+                    },
+                    onDragEntered: (details) {
+                      setState(() => _isDragging = true);
+                    },
+                    onDragExited: (details) {
+                      setState(() => _isDragging = false);
+                    },
+                    child: Container(
+                      color: _isDragging ? Colors.blue.withOpacity(0.1) : null,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.upload_file,
+                              size: 64,
+                              color: _isDragging ? Colors.blue : Colors.grey,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _isDragging ? 'Drop PDF here' : 'Drag and drop PDF here',
+                              style: Theme.of(context).textTheme.headlineSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _status,
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-        ),
+          // Signed Documents column
+          Container(
+            width: 320,
+            color: Colors.grey[50],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    'Signed Documents',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _signedDocuments.length,
+                    itemBuilder: (context, index) {
+                      final file = _signedDocuments[index];
+                      return ListTile(
+                        title: Text(file.path.split(Platform.pathSeparator).last),
+                        onTap: () async {
+                          final bytes = await file.readAsBytes();
+                          showDialog(
+                            context: context,
+                            builder: (context) => Dialog(
+                              child: Container(
+                                width: 600,
+                                height: 800,
+                                child: SfPdfViewer.memory(Uint8List.fromList(bytes)),
+                              ),
+                            ),
+                          );
+                        },
+                        leading: const Icon(Icons.picture_as_pdf),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
