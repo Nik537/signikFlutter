@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
+import '../models/signik_document.dart';
 
 class PdfService {
   static const double _signatureMargin = 56.69; // 2 cm in points
@@ -33,5 +34,15 @@ class PdfService {
     document.dispose();
     
     return Uint8List.fromList(signedPdfBytes);
+  }
+
+  SignikDocument createSignedDocument(String originalPath) {
+    final dir = originalPath.substring(0, originalPath.lastIndexOf('/'));
+    final name = originalPath.split('/').last;
+    return SignikDocument(
+      name: name,
+      path: originalPath,
+      status: SignikDocumentStatus.signed,
+    );
   }
 } 

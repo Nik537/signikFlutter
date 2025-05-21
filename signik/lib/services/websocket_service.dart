@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import '../models/signik_message.dart';
 
 class WebSocketService {
   HttpServer? _server;
@@ -74,12 +75,16 @@ class WebSocketService {
     if (_client != null) {
       if (data is List<int>) {
         _client!.add(data);
+      } else if (data is SignikMessage) {
+        _client!.add(jsonEncode(data.toJson()));
       } else {
         _client!.add(jsonEncode(data));
       }
     } else if (_connection != null) {
       if (data is List<int>) {
         _connection!.add(data);
+      } else if (data is SignikMessage) {
+        _connection!.add(jsonEncode(data.toJson()));
       } else {
         _connection!.add(jsonEncode(data));
       }
@@ -104,5 +109,17 @@ class WebSocketService {
     await _client?.close();
     await _connection?.close();
     await _server?.close();
+  }
+
+  static SignikMessage? tryParseMessage(dynamic data) {
+    if (data is String) {
+      try {
+        final json = jsonDecode(data);
+        if (json is Map<String, dynamic>) {
+          return SignikMessage.fromJson(json);
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 } 
