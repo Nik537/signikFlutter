@@ -144,6 +144,7 @@ class _WindowsHomeState extends State<WindowsHome> {
                       ip: snapshot.data,
                       port: _webSocketService.port,
                       connected: _isConnected,
+                      hideStatus: true,
                     );
                   },
                 ),

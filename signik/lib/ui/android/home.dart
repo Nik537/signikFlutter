@@ -172,14 +172,13 @@ class _AndroidHomeState extends State<AndroidHome> {
         children: [
           StatusPanel(status: _status, connected: _isConnected),
           if (_pdfBytes != null) ...[
-            Expanded(child: PdfViewerWidget(pdfBytes: _pdfBytes!)),
-            const Divider(height: 1),
-            Container(
-              height: 200,
-              color: Colors.white,
-              child: Signature(
-                controller: _signatureController,
-                backgroundColor: Colors.white,
+            Expanded(
+              child: Container(
+                color: Colors.white,
+                child: Signature(
+                  controller: _signatureController,
+                  backgroundColor: Colors.white,
+                ),
               ),
             ),
           ] else
@@ -202,7 +201,7 @@ class _AndroidHomeState extends State<AndroidHome> {
       floatingActionButton: _pdfBytes != null && !_isSigned
           ? FloatingActionButton.extended(
               onPressed: _sendSignature,
-              label: const Text('Sign & Send'),
+              label: const Text('Send'),
               icon: const Icon(Icons.send),
             )
           : null,

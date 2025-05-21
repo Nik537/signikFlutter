@@ -5,6 +5,7 @@ class StatusPanel extends StatelessWidget {
   final String? ip;
   final int? port;
   final bool connected;
+  final bool hideStatus;
 
   const StatusPanel({
     super.key,
@@ -12,6 +13,7 @@ class StatusPanel extends StatelessWidget {
     this.ip,
     this.port,
     this.connected = false,
+    this.hideStatus = false,
   });
 
   @override
@@ -33,7 +35,7 @@ class StatusPanel extends StatelessWidget {
                   Text('IP: $ip', style: Theme.of(context).textTheme.bodyMedium),
                   Text('Port: $port', style: Theme.of(context).textTheme.bodyMedium),
                 ],
-                Text(status, style: Theme.of(context).textTheme.bodyLarge),
+                if (!hideStatus) Text(status, style: Theme.of(context).textTheme.bodyLarge),
               ],
             ),
           ),
