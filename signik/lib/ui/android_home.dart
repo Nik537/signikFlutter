@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:signature/signature.dart';
 import '../services/websocket_service.dart';
@@ -32,6 +33,11 @@ class _AndroidHomeState extends State<AndroidHome> {
   @override
   void initState() {
     super.initState();
+    // Force landscape orientation
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
   }
 
   Future<void> _connectToServer() async {
@@ -114,6 +120,54 @@ class _AndroidHomeState extends State<AndroidHome> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isConnected) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Signik - Android'),
+        ),
+        body: SingleChildScrollView(
+          child: Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 400),
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextField(
+                    controller: _ipController,
+                    decoration: const InputDecoration(
+                      labelText: 'Windows App IP Address',
+                      hintText: 'Enter IP address (e.g., 192.168.1.100)',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _portController,
+                    decoration: const InputDecoration(
+                      labelText: 'Port',
+                      hintText: 'Enter port number',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _connectToServer,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(200, 50),
+                    ),
+                    child: const Text('Connect'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Signik - Android'),
@@ -127,39 +181,6 @@ class _AndroidHomeState extends State<AndroidHome> {
       ),
       body: Column(
         children: [
-          if (!_isConnected) ...[
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _ipController,
-                    decoration: const InputDecoration(
-                      labelText: 'Windows App IP Address',
-                      hintText: 'Enter IP address (e.g., 192.168.1.100)',
-                    ),
-                    keyboardType: TextInputType.number,
-                    enabled: !_isConnected,
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _portController,
-                    decoration: const InputDecoration(
-                      labelText: 'Port',
-                      hintText: 'Enter port number',
-                    ),
-                    keyboardType: TextInputType.number,
-                    enabled: !_isConnected,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _connectToServer,
-                    child: const Text('Connect'),
-                  ),
-                ],
-              ),
-            ),
-          ],
           if (_signedPdfBytes != null) ...[
             Expanded(
               child: SfPdfViewer.memory(
@@ -224,6 +245,13 @@ class _AndroidHomeState extends State<AndroidHome> {
 
   @override
   void dispose() {
+    // Reset orientation when leaving
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     _webSocketService.dispose();
     _signatureController.dispose();
     _ipController.dispose();
