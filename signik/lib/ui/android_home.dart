@@ -19,9 +19,11 @@ class _AndroidHomeState extends State<AndroidHome> {
     penColor: Colors.black,
     exportBackgroundColor: Colors.white,
   );
+  final _ipController = TextEditingController();
+  final _portController = TextEditingController();
   
   bool _isConnected = false;
-  String _status = 'Connecting...';
+  String _status = 'Waiting to connect...';
   Uint8List? _pdfBytes;
   Uint8List? _signedPdfBytes;
   String? _currentFileName;
@@ -30,23 +32,35 @@ class _AndroidHomeState extends State<AndroidHome> {
   @override
   void initState() {
     super.initState();
-    _initializeWebSocket();
   }
 
-  Future<void> _initializeWebSocket() async {
-    // TODO: Implement QR code scanning or UDP broadcast discovery
-    // For now, hardcode the WebSocket URL
-    const wsUrl = 'ws://192.168.1.100:9000'; // Replace with actual PC IP
+  Future<void> _connectToServer() async {
+    final ip = _ipController.text.trim();
+    final port = _portController.text.trim();
+    
+    if (ip.isEmpty) {
+      setState(() => _status = 'Please enter Windows app IP address');
+      return;
+    }
+
+    if (port.isEmpty) {
+      setState(() => _status = 'Please enter port number');
+      return;
+    }
+
+    setState(() => _status = 'Connecting...');
     
     try {
+      final wsUrl = 'ws://$ip:$port';
       await _webSocketService.connect(wsUrl);
       _webSocketService.onMessage.listen(_handleMessage);
       setState(() {
         _isConnected = true;
-        _status = 'Connected to PC';
+        _status = 'Connected to Windows app';
       });
     } catch (e) {
       setState(() {
+        _isConnected = false;
         _status = 'Connection failed: $e';
       });
     }
@@ -113,6 +127,39 @@ class _AndroidHomeState extends State<AndroidHome> {
       ),
       body: Column(
         children: [
+          if (!_isConnected) ...[
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _ipController,
+                    decoration: const InputDecoration(
+                      labelText: 'Windows App IP Address',
+                      hintText: 'Enter IP address (e.g., 192.168.1.100)',
+                    ),
+                    keyboardType: TextInputType.number,
+                    enabled: !_isConnected,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _portController,
+                    decoration: const InputDecoration(
+                      labelText: 'Port',
+                      hintText: 'Enter port number',
+                    ),
+                    keyboardType: TextInputType.number,
+                    enabled: !_isConnected,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _connectToServer,
+                    child: const Text('Connect'),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (_signedPdfBytes != null) ...[
             Expanded(
               child: SfPdfViewer.memory(
@@ -179,6 +226,8 @@ class _AndroidHomeState extends State<AndroidHome> {
   void dispose() {
     _webSocketService.dispose();
     _signatureController.dispose();
+    _ipController.dispose();
+    _portController.dispose();
     super.dispose();
   }
 } 

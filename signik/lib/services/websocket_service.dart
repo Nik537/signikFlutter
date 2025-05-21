@@ -13,12 +13,13 @@ class WebSocketService {
 
   Stream<dynamic> get onMessage => _onMessageController.stream;
   Stream<bool> get onConnection => _onConnectionController.stream;
+  int get port => _port;
 
   Future<void> startServer() async {
     try {
       _server = await HttpServer.bind(InternetAddress.anyIPv4, _port);
       _server!.listen(_handleConnection);
-      print('WebSocket server started on ws://${await _getLocalIp()}:$_port');
+      print('WebSocket server started on ws://${await getLocalIp()}:$_port');
     } catch (e) {
       print('Failed to start WebSocket server: $e');
       rethrow;
@@ -85,7 +86,7 @@ class WebSocketService {
     }
   }
 
-  Future<String> _getLocalIp() async {
+  Future<String> getLocalIp() async {
     final interfaces = await NetworkInterface.list();
     for (var interface in interfaces) {
       for (var addr in interface.addresses) {

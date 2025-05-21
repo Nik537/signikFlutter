@@ -126,45 +126,88 @@ class _WindowsHomeState extends State<WindowsHome> {
           const SizedBox(width: 16),
         ],
       ),
-      body: DropTarget(
-        onDragDone: (details) {
-          for (final file in details.files) {
-            if (file.path.toLowerCase().endsWith('.pdf')) {
-              _handleFileChanged(File(file.path));
-            }
-          }
-        },
-        onDragEntered: (details) {
-          setState(() => _isDragging = true);
-        },
-        onDragExited: (details) {
-          setState(() => _isDragging = false);
-        },
-        child: Container(
-          color: _isDragging ? Colors.blue.withOpacity(0.1) : null,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+      body: Column(
+        children: [
+          // Connection info panel
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.grey[100],
+            child: Row(
               children: [
-                Icon(
-                  Icons.upload_file,
-                  size: 64,
-                  color: _isDragging ? Colors.blue : Colors.grey,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  _isDragging ? 'Drop PDF here' : 'Drag and drop PDF here',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _status,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                const Icon(Icons.info_outline),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Server running at:',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      FutureBuilder<String>(
+                        future: _webSocketService.getLocalIp(),
+                        builder: (context, snapshot) {
+                          return Text(
+                            'IP: ${snapshot.data ?? "Loading..."}',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          );
+                        },
+                      ),
+                      Text(
+                        'Port: ${_webSocketService.port}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-        ),
+          // Main content
+          Expanded(
+            child: DropTarget(
+              onDragDone: (details) {
+                for (final file in details.files) {
+                  if (file.path.toLowerCase().endsWith('.pdf')) {
+                    _handleFileChanged(File(file.path));
+                  }
+                }
+              },
+              onDragEntered: (details) {
+                setState(() => _isDragging = true);
+              },
+              onDragExited: (details) {
+                setState(() => _isDragging = false);
+              },
+              child: Container(
+                color: _isDragging ? Colors.blue.withOpacity(0.1) : null,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.upload_file,
+                        size: 64,
+                        color: _isDragging ? Colors.blue : Colors.grey,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _isDragging ? 'Drop PDF here' : 'Drag and drop PDF here',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _status,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
