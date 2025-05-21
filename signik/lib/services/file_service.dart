@@ -33,11 +33,11 @@ class FileService {
   }
 
   Future<void> writeFile(File file, List<int> bytes) async {
-    final signedPath = _getSignedPath(file.path);
+    final signedPath = getSignedPath(file.path);
     await File(signedPath).writeAsBytes(bytes);
   }
 
-  String _getSignedPath(String originalPath) {
+  String getSignedPath(String originalPath) {
     final dir = path.dirname(originalPath);
     final name = path.basenameWithoutExtension(originalPath);
     final ext = path.extension(originalPath);

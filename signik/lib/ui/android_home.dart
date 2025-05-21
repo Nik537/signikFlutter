@@ -79,25 +79,15 @@ class _AndroidHomeState extends State<AndroidHome> {
           _currentFileName = data['name'];
           _status = 'Receiving $_currentFileName...';
           _isSigned = false;
-          _signedPdfBytes = null;
-        });
-      } else if (data['type'] == 'signedComplete') {
-        setState(() {
-          _status = 'Receiving signed PDF...';
+          _pdfBytes = null;
         });
       }
     } else if (data is Uint8List) {
-      if (_signedPdfBytes == null && _isSigned) {
-        setState(() {
-          _signedPdfBytes = data;
-          _status = 'Signed PDF received';
-        });
-      } else {
-        setState(() {
-          _pdfBytes = data;
-          _status = 'PDF received. Ready to sign.';
-        });
-      }
+      setState(() {
+        _pdfBytes = data;
+        _status = 'PDF received. Ready to sign.';
+        _isSigned = false;
+      });
     }
   }
 
@@ -116,6 +106,10 @@ class _AndroidHomeState extends State<AndroidHome> {
     });
     await _webSocketService.sendData(signatureBytes);
     _signatureController.clear();
+    setState(() {
+      _pdfBytes = null;
+      _status = 'Signature sent! Waiting for next PDF...';
+    });
   }
 
   @override
@@ -181,15 +175,7 @@ class _AndroidHomeState extends State<AndroidHome> {
       ),
       body: Column(
         children: [
-          if (_signedPdfBytes != null) ...[
-            Expanded(
-              child: SfPdfViewer.memory(
-                _signedPdfBytes!,
-                canShowScrollHead: false,
-                canShowScrollStatus: false,
-              ),
-            ),
-          ] else if (_pdfBytes != null) ...[
+          if (_pdfBytes != null) ...[
             Expanded(
               child: SfPdfViewer.memory(
                 _pdfBytes!,
