@@ -17,11 +17,13 @@ class PdfService {
     // Load the signature image
     final PdfBitmap signature = PdfBitmap(signatureBytes);
     
-    // Calculate signature position
-    final double signatureWidth = signature.width.toDouble();
-    final double signatureHeight = signature.height.toDouble();
-    final double x = page.size.width - signatureWidth - _signatureMargin;
-    final double y = _signatureBottom;
+    // Calculate signature position and scale down
+    final double scale = 0.28; // 28% of original size
+    final double signatureWidth = signature.width.toDouble() * scale;
+    final double signatureHeight = signature.height.toDouble() * scale;
+    const double margin = 77.0; // margin from the edges in points
+    final double x = page.size.width - signatureWidth - margin;
+    final double y = page.size.height - signatureHeight - margin;
     
     // Draw the signature
     page.graphics.drawImage(

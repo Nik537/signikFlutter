@@ -17,7 +17,7 @@ class AndroidHome extends StatefulWidget {
 class _AndroidHomeState extends State<AndroidHome> {
   final WebSocketService _webSocketService = WebSocketService();
   final SignatureController _signatureController = SignatureController(
-    penStrokeWidth: 5,
+    penStrokeWidth: 2,
     penColor: Colors.black,
     exportBackgroundColor: Colors.white,
   );
