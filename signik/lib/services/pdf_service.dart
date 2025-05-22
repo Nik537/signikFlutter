@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
+import '../models/signik_document.dart';
 
 class PdfService {
   static const double _signatureMargin = 56.69; // 2 cm in points
@@ -16,11 +17,13 @@ class PdfService {
     // Load the signature image
     final PdfBitmap signature = PdfBitmap(signatureBytes);
     
-    // Calculate signature position
-    final double signatureWidth = signature.width.toDouble();
-    final double signatureHeight = signature.height.toDouble();
-    final double x = page.size.width - signatureWidth - _signatureMargin;
-    final double y = _signatureBottom;
+    // Calculate signature position and scale down
+    final double scale = 0.28; // 28% of original size
+    final double signatureWidth = signature.width.toDouble() * scale;
+    final double signatureHeight = signature.height.toDouble() * scale;
+    const double margin = 77.0; // margin from the edges in points
+    final double x = page.size.width - signatureWidth - margin;
+    final double y = page.size.height - signatureHeight - margin;
     
     // Draw the signature
     page.graphics.drawImage(
@@ -33,5 +36,15 @@ class PdfService {
     document.dispose();
     
     return Uint8List.fromList(signedPdfBytes);
+  }
+
+  SignikDocument createSignedDocument(String originalPath) {
+    final dir = originalPath.substring(0, originalPath.lastIndexOf('/'));
+    final name = originalPath.split('/').last;
+    return SignikDocument(
+      name: name,
+      path: originalPath,
+      status: SignikDocumentStatus.signed,
+    );
   }
 } 

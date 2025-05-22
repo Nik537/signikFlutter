@@ -2,10 +2,14 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import '../services/websocket_service.dart';
-import '../services/file_service.dart';
-import '../services/pdf_service.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import '../../services/websocket_service.dart';
+import '../../services/file_service.dart';
+import '../../services/pdf_service.dart';
+import '../../models/signik_document.dart';
+import '../../models/signik_message.dart';
+import '../../widgets/status_panel.dart';
+import '../../widgets/signed_documents_list.dart';
+import '../../widgets/pdf_viewer.dart';
 
 class WindowsHome extends StatefulWidget {
   const WindowsHome({super.key});
@@ -15,15 +19,15 @@ class WindowsHome extends StatefulWidget {
 }
 
 class _WindowsHomeState extends State<WindowsHome> {
-  final _webSocketService = WebSocketService();
+  final WebSocketService _webSocketService = WebSocketService();
   late FileService _fileService;
-  final _pdfService = PdfService();
+  final PdfService _pdfService = PdfService();
   bool _isConnected = false;
   bool _isDragging = false;
   String _status = 'Waiting for PDF...';
   File? _currentFile;
   Uint8List? _currentPdfBytes;
-  final List<File> _signedDocuments = [];
+  final List<SignikDocument> _signedDocuments = [];
 
   @override
   void initState() {
@@ -33,28 +37,19 @@ class _WindowsHomeState extends State<WindowsHome> {
 
   Future<void> _initializeServices() async {
     try {
-      // Get the user's documents directory for watching
       final documentsDir = Directory('${Platform.environment['USERPROFILE']}\\Documents');
       if (!await documentsDir.exists()) {
         await documentsDir.create(recursive: true);
       }
       _fileService = FileService(watchDirectory: documentsDir.path);
-
-      // Start WebSocket server
       await _webSocketService.startServer();
-
-      // Listen for connections
       _webSocketService.onConnection.listen((connected) {
         setState(() {
           _isConnected = connected;
           _status = connected ? 'Phone connected' : 'Waiting for phone...';
         });
       });
-
-      // Listen for file changes
       _fileService.onFileChanged.listen(_handleFileChanged);
-
-      // Listen for messages
       _webSocketService.onMessage.listen(_handleMessage);
     } catch (e) {
       setState(() {
@@ -68,19 +63,15 @@ class _WindowsHomeState extends State<WindowsHome> {
       setState(() => _status = 'Please connect your phone first');
       return;
     }
-
     setState(() {
       _currentFile = file;
       _status = 'Processing ${file.path}...';
     });
-    
     try {
       final bytes = await _fileService.readFile(file);
       _currentPdfBytes = Uint8List.fromList(bytes);
-      await _webSocketService.sendData({
-        'type': 'sendStart',
-        'name': file.path.split(Platform.pathSeparator).last,
-      });
+      final msg = SignikMessage(type: SignikMessageType.sendStart, name: file.path.split(Platform.pathSeparator).last);
+      await _webSocketService.sendData(msg);
       await _webSocketService.sendData(_currentPdfBytes!);
     } catch (e) {
       setState(() => _status = 'Error: $e');
@@ -91,32 +82,39 @@ class _WindowsHomeState extends State<WindowsHome> {
     if (data is Uint8List && _currentFile != null && _currentPdfBytes != null) {
       setState(() => _status = 'Embedding signature...');
       try {
-        // Embed the signature
-        final signedPdfBytes = await _pdfService.embedSignature(
-          _currentPdfBytes!,
-          data,
-        );
-        // Save the signed PDF
+        final signedPdfBytes = await _pdfService.embedSignature(_currentPdfBytes!, data);
         final signedPath = _fileService.getSignedPath(_currentFile!.path);
         final signedFile = File(signedPath);
         await signedFile.writeAsBytes(signedPdfBytes);
-        // Add to signed documents list
+        final doc = _fileService.fileToDocument(signedFile, signed: true);
         setState(() {
-          if (!_signedDocuments.any((f) => f.path == signedFile.path)) {
-            _signedDocuments.add(signedFile);
+          if (!_signedDocuments.any((d) => d.path == doc.path)) {
+            _signedDocuments.add(doc);
           }
         });
-        // Send the signed PDF back to Android
-        await _webSocketService.sendData({
-          'type': 'signedComplete',
-          'name': _currentFile!.path.split(Platform.pathSeparator).last,
-        });
+        final msg = SignikMessage(type: SignikMessageType.signedComplete, name: _currentFile!.path.split(Platform.pathSeparator).last);
+        await _webSocketService.sendData(msg);
         await _webSocketService.sendData(signedPdfBytes);
         setState(() => _status = 'PDF signed and saved');
       } catch (e) {
         setState(() => _status = 'Error embedding signature: $e');
       }
     }
+  }
+
+  void _openDocument(SignikDocument doc) async {
+    final file = File(doc.path);
+    final bytes = await file.readAsBytes();
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: 600,
+          height: 800,
+          child: PdfViewerWidget(pdfBytes: bytes),
+        ),
+      ),
+    );
   }
 
   @override
@@ -134,48 +132,22 @@ class _WindowsHomeState extends State<WindowsHome> {
       ),
       body: Row(
         children: [
-          // Main content (drag-and-drop area)
           Expanded(
             flex: 2,
             child: Column(
               children: [
-                // Connection info panel
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.grey[100],
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Server running at:',
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            const SizedBox(height: 4),
-                            FutureBuilder<String>(
-                              future: _webSocketService.getLocalIp(),
-                              builder: (context, snapshot) {
-                                return Text(
-                                  'IP: ${snapshot.data ?? "Loading..."}',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                );
-                              },
-                            ),
-                            Text(
-                              'Port: ${_webSocketService.port}',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                FutureBuilder<String>(
+                  future: _webSocketService.getLocalIp(),
+                  builder: (context, snapshot) {
+                    return StatusPanel(
+                      status: _status,
+                      ip: snapshot.data,
+                      port: _webSocketService.port,
+                      connected: _isConnected,
+                      hideStatus: true,
+                    );
+                  },
                 ),
-                // Main drag-and-drop area
                 Expanded(
                   child: DropTarget(
                     onDragDone: (details) {
@@ -221,7 +193,6 @@ class _WindowsHomeState extends State<WindowsHome> {
               ],
             ),
           ),
-          // Signed Documents column
           Container(
             width: 320,
             color: Colors.grey[50],
@@ -236,28 +207,9 @@ class _WindowsHomeState extends State<WindowsHome> {
                   ),
                 ),
                 Expanded(
-                  child: ListView.builder(
-                    itemCount: _signedDocuments.length,
-                    itemBuilder: (context, index) {
-                      final file = _signedDocuments[index];
-                      return ListTile(
-                        title: Text(file.path.split(Platform.pathSeparator).last),
-                        onTap: () async {
-                          final bytes = await file.readAsBytes();
-                          showDialog(
-                            context: context,
-                            builder: (context) => Dialog(
-                              child: Container(
-                                width: 600,
-                                height: 800,
-                                child: SfPdfViewer.memory(Uint8List.fromList(bytes)),
-                              ),
-                            ),
-                          );
-                        },
-                        leading: const Icon(Icons.picture_as_pdf),
-                      );
-                    },
+                  child: SignedDocumentsList(
+                    documents: _signedDocuments,
+                    onOpen: _openDocument,
                   ),
                 ),
               ],

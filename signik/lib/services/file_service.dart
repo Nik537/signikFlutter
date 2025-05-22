@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as path;
 import 'package:watcher/watcher.dart';
+import '../models/signik_document.dart';
 
 class FileService {
   final String watchDirectory;
@@ -46,5 +47,13 @@ class FileService {
 
   Future<void> dispose() async {
     await _onFileChangedController.close();
+  }
+
+  SignikDocument fileToDocument(File file, {bool signed = false}) {
+    return SignikDocument(
+      name: path.basename(file.path),
+      path: file.path,
+      status: signed ? SignikDocumentStatus.signed : SignikDocumentStatus.unsigned,
+    );
   }
 } 
