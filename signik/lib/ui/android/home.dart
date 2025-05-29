@@ -173,12 +173,53 @@ class _AndroidHomeState extends State<AndroidHome> {
           StatusPanel(status: _status, connected: _isConnected),
           if (_pdfBytes != null) ...[
             Expanded(
-              child: Container(
-                color: Colors.white,
-                child: Signature(
-                  controller: _signatureController,
-                  backgroundColor: Colors.white,
-                ),
+              child: Stack(
+                children: [
+                  // Signature area
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.white,
+                      child: Signature(
+                        controller: _signatureController,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  // PDF preview in upper right
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => Dialog(
+                            insetPadding: const EdgeInsets.all(16),
+                            child: SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.8,
+                              height: MediaQuery.of(context).size.height * 0.8,
+                              child: PdfViewerWidget(pdfBytes: _pdfBytes!),
+                            ),
+                          ),
+                        );
+                      },
+                      child: Material(
+                        elevation: 4,
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 120,
+                          height: 160,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: AbsorbPointer(
+                              child: PdfViewerWidget(pdfBytes: _pdfBytes!),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ] else
