@@ -79,6 +79,65 @@ class _WindowsHomeState extends State<WindowsHome> {
   }
 
   Future<void> _handleMessage(dynamic data) async {
+    final msg = data is! Uint8List ? WebSocketService.tryParseMessage(data) : null;
+    if (msg != null && msg.type == SignikMessageType.signaturePreview && msg.data != null) {
+      // Show preview dialog and wait for user action
+      final accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Signature Preview'),
+          content: SizedBox(
+            width: 300,
+            height: 200,
+            child: Image.memory(Uint8List.fromList(List<int>.from(msg.data))),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Decline'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Accept'),
+            ),
+          ],
+        ),
+      );
+      if (accepted == true) {
+        // Send accepted message
+        final acceptMsg = SignikMessage(type: SignikMessageType.signatureAccepted);
+        await _webSocketService.sendData(acceptMsg);
+        // Now embed the signature as before
+        if (_currentFile != null && _currentPdfBytes != null) {
+          setState(() => _status = 'Embedding signature...');
+          try {
+            final signedPdfBytes = await _pdfService.embedSignature(_currentPdfBytes!, Uint8List.fromList(List<int>.from(msg.data)));
+            final signedPath = _fileService.getSignedPath(_currentFile!.path);
+            final signedFile = File(signedPath);
+            await signedFile.writeAsBytes(signedPdfBytes);
+            final doc = _fileService.fileToDocument(signedFile, signed: true);
+            setState(() {
+              if (!_signedDocuments.any((d) => d.path == doc.path)) {
+                _signedDocuments.add(doc);
+              }
+            });
+            final completeMsg = SignikMessage(type: SignikMessageType.signedComplete, name: _currentFile!.path.split(Platform.pathSeparator).last);
+            await _webSocketService.sendData(completeMsg);
+            await _webSocketService.sendData(signedPdfBytes);
+            setState(() => _status = 'PDF signed and saved');
+          } catch (e) {
+            setState(() => _status = 'Error embedding signature: $e');
+          }
+        }
+      } else {
+        // Send declined message
+        final declineMsg = SignikMessage(type: SignikMessageType.signatureDeclined);
+        await _webSocketService.sendData(declineMsg);
+        setState(() => _status = 'Signature declined. Waiting for new signature...');
+      }
+      return;
+    }
     if (data is Uint8List && _currentFile != null && _currentPdfBytes != null) {
       setState(() => _status = 'Embedding signature...');
       try {

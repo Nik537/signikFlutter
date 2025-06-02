@@ -3,6 +3,9 @@ import 'dart:typed_data';
 enum SignikMessageType {
   sendStart,
   signedComplete,
+  signaturePreview,
+  signatureAccepted,
+  signatureDeclined,
   unknown,
 }
 
@@ -35,6 +38,12 @@ class SignikMessage {
         return SignikMessageType.sendStart;
       case 'signedComplete':
         return SignikMessageType.signedComplete;
+      case 'signaturePreview':
+        return SignikMessageType.signaturePreview;
+      case 'signatureAccepted':
+        return SignikMessageType.signatureAccepted;
+      case 'signatureDeclined':
+        return SignikMessageType.signatureDeclined;
       default:
         return SignikMessageType.unknown;
     }
@@ -46,6 +55,12 @@ class SignikMessage {
         return 'sendStart';
       case SignikMessageType.signedComplete:
         return 'signedComplete';
+      case SignikMessageType.signaturePreview:
+        return 'signaturePreview';
+      case SignikMessageType.signatureAccepted:
+        return 'signatureAccepted';
+      case SignikMessageType.signatureDeclined:
+        return 'signatureDeclined';
       default:
         return 'unknown';
     }

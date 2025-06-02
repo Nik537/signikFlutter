@@ -81,6 +81,22 @@ class _AndroidHomeState extends State<AndroidHome> {
         });
         return;
       }
+      if (msg.type == SignikMessageType.signatureAccepted) {
+        setState(() {
+          _status = 'Signature accepted! Waiting for next PDF...';
+          _pdfBytes = null;
+          _isSigned = false;
+        });
+        return;
+      }
+      if (msg.type == SignikMessageType.signatureDeclined) {
+        setState(() {
+          _status = 'Signature declined. Please sign again.';
+          _isSigned = false;
+        });
+        _signatureController.clear();
+        return;
+      }
     }
     if (data is Uint8List && _expectingPdf) {
       setState(() {
@@ -100,16 +116,11 @@ class _AndroidHomeState extends State<AndroidHome> {
       return;
     }
     setState(() {
-      _status = 'Sending signature...';
+      _status = 'Sending signature for review...';
       _isSigned = true;
     });
-    await _webSocketService.sendData(signatureBytes);
-    _signatureController.clear();
-    setState(() {
-      _pdfBytes = null;
-      _status = 'Signature sent! Waiting for next PDF...';
-      _expectingPdf = false;
-    });
+    final previewMsg = SignikMessage(type: SignikMessageType.signaturePreview, data: signatureBytes);
+    await _webSocketService.sendData(previewMsg);
   }
 
   @override

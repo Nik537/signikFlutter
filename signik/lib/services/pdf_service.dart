@@ -18,7 +18,7 @@ class PdfService {
     final PdfBitmap signature = PdfBitmap(signatureBytes);
     
     // Calculate signature position and scale down
-    final double scale = 0.28; // 28% of original size
+    final double scale = 0.1; // 10% of original size
     final double signatureWidth = signature.width.toDouble() * scale;
     final double signatureHeight = signature.height.toDouble() * scale;
     const double margin = 77.0; // margin from the edges in points
