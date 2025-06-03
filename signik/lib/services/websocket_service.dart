@@ -31,7 +31,7 @@ class WebSocketService {
     try {
       _connection = await WebSocket.connect(url);
       _connection!.listen(
-        (data) => _onMessageController.add(data),
+        (data) => _handleIncomingData(data),
         onDone: () {
           _connection = null;
           _onConnectionController.add(false);
@@ -56,7 +56,7 @@ class WebSocketService {
         _onConnectionController.add(true);
         
         ws.listen(
-          (data) => _onMessageController.add(data),
+          (data) => _handleIncomingData(data),
           onDone: () {
             _client = null;
             _onConnectionController.add(false);
@@ -68,6 +68,30 @@ class WebSocketService {
           },
         );
       });
+    }
+  }
+
+  void _handleIncomingData(dynamic data) {
+    // Handle both string (JSON) and binary data
+    if (data is String) {
+      // Try to parse as JSON message
+      try {
+        final json = jsonDecode(data);
+        if (json is Map<String, dynamic>) {
+          final message = SignikMessage.fromJson(json);
+          _onMessageController.add(message);
+          return;
+        }
+      } catch (_) {
+        // Not a JSON message, forward as raw string
+        _onMessageController.add(data);
+      }
+    } else if (data is List<int>) {
+      // Binary data (PDF bytes)
+      _onMessageController.add(Uint8List.fromList(data));
+    } else {
+      // Unknown data type, forward as-is
+      _onMessageController.add(data);
     }
   }
 
@@ -119,6 +143,8 @@ class WebSocketService {
           return SignikMessage.fromJson(json);
         }
       } catch (_) {}
+    } else if (data is SignikMessage) {
+      return data;
     }
     return null;
   }

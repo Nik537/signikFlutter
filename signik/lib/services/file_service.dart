@@ -50,10 +50,17 @@ class FileService {
   }
 
   SignikDocument fileToDocument(File file, {bool signed = false}) {
+    // Generate a simple ID from file path and timestamp
+    final id = '${path.basename(file.path)}_${DateTime.now().millisecondsSinceEpoch}';
+    final now = DateTime.now();
+    
     return SignikDocument(
+      id: id,
       name: path.basename(file.path),
       path: file.path,
-      status: signed ? SignikDocumentStatus.signed : SignikDocumentStatus.unsigned,
+      status: signed ? SignikDocumentStatus.signed : SignikDocumentStatus.queued,
+      createdAt: now,
+      updatedAt: now,
     );
   }
 } 
