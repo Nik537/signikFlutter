@@ -13,6 +13,7 @@ import '../../widgets/status_panel.dart';
 import '../../widgets/signed_documents_list.dart';
 import '../../widgets/pdf_viewer.dart';
 import '../../widgets/device_selection_dialog.dart';
+import 'device_connection_tab.dart';
 
 class WindowsHome extends StatefulWidget {
   const WindowsHome({super.key});
@@ -21,10 +22,11 @@ class WindowsHome extends StatefulWidget {
   State<WindowsHome> createState() => _WindowsHomeState();
 }
 
-class _WindowsHomeState extends State<WindowsHome> {
+class _WindowsHomeState extends State<WindowsHome> with TickerProviderStateMixin {
   final cm.ConnectionManager _connectionManager = cm.ConnectionManager();
   late FileService _fileService;
   final PdfService _pdfService = PdfService();
+  late TabController _tabController;
   bool _isConnected = false;
   bool _isDragging = false;
   String _status = 'Connecting to broker...';
@@ -37,6 +39,7 @@ class _WindowsHomeState extends State<WindowsHome> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _initializeServices();
   }
 
@@ -311,94 +314,123 @@ class _WindowsHomeState extends State<WindowsHome> {
           ),
           const SizedBox(width: 16),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.picture_as_pdf),
+              text: 'PDF Signing',
+            ),
+            Tab(
+              icon: Icon(Icons.devices),
+              text: 'Device Connections',
+            ),
+          ],
+        ),
       ),
-      body: Row(
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          Expanded(
-            flex: 2,
-            child: Column(
-              children: [
-                StatusPanel(
-                  status: _status,
-                  ip: 'Broker Mode',
-                  port: 0,
-                  connected: _isConnected,
-                  hideStatus: true,
-                ),
-                Expanded(
-                  child: DropTarget(
-                    onDragDone: (details) {
-                      for (final file in details.files) {
-                        if (file.path.toLowerCase().endsWith('.pdf')) {
-                          _handleFileChanged(File(file.path));
-                        }
-                      }
-                    },
-                    onDragEntered: (details) {
-                      setState(() => _isDragging = true);
-                    },
-                    onDragExited: (details) {
-                      setState(() => _isDragging = false);
-                    },
-                    child: Container(
-                      color: _isDragging ? Colors.blue.withOpacity(0.1) : null,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.upload_file,
-                              size: 64,
-                              color: _isDragging ? Colors.blue : Colors.grey,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _isDragging ? 'Drop PDF here' : 'Drag and drop PDF here',
-                              style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _status,
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 320,
-            color: Colors.grey[50],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'Signed Documents',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                Expanded(
-                  child: SignedDocumentsList(
-                    documents: _signedDocuments,
-                    onOpen: _openDocument,
-                  ),
-                ),
-              ],
-            ),
+          // PDF Signing Tab
+          _buildPdfSigningTab(),
+          
+          // Device Connections Tab
+          DeviceConnectionTab(
+            connectionManager: _connectionManager,
           ),
         ],
       ),
     );
   }
 
+  Widget _buildPdfSigningTab() {
+    return Row(
+      children: [
+        Expanded(
+          flex: 2,
+          child: Column(
+            children: [
+              StatusPanel(
+                status: _status,
+                ip: 'Broker Mode',
+                port: 0,
+                connected: _isConnected,
+                hideStatus: true,
+              ),
+              Expanded(
+                child: DropTarget(
+                  onDragDone: (details) {
+                    for (final file in details.files) {
+                      if (file.path.toLowerCase().endsWith('.pdf')) {
+                        _handleFileChanged(File(file.path));
+                      }
+                    }
+                  },
+                  onDragEntered: (details) {
+                    setState(() => _isDragging = true);
+                  },
+                  onDragExited: (details) {
+                    setState(() => _isDragging = false);
+                  },
+                  child: Container(
+                    color: _isDragging ? Colors.blue.withOpacity(0.1) : null,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.upload_file,
+                            size: 64,
+                            color: _isDragging ? Colors.blue : Colors.grey,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _isDragging ? 'Drop PDF here' : 'Drag and drop PDF here',
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _status,
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 320,
+          color: Colors.grey[50],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'Signed Documents',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              Expanded(
+                child: SignedDocumentsList(
+                  documents: _signedDocuments,
+                  onOpen: _openDocument,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
+    _tabController.dispose();
     _connectionManager.dispose();
     _fileService.dispose();
     super.dispose();

@@ -8,6 +8,7 @@ import 'heartbeat_service.dart';
 import 'app_config.dart';
 import '../models/signik_device.dart';
 import '../models/signik_message.dart';
+import '../models/device_connection.dart';
 
 class ConnectionManager {
   WebSocketService? _webSocketService;
@@ -92,9 +93,41 @@ class ConnectionManager {
   Future<List<SignikDevice>> getOnlineDevices({DeviceType? deviceType}) async {
     if (_brokerService != null) {
       final filterType = deviceType ?? (Platform.isWindows ? DeviceType.android : DeviceType.windows);
-      return await _brokerService!.getDevices(deviceType: filterType);
+      return await _brokerService!.getOnlineDevices(deviceType: filterType);
     }
     return [];
+  }
+
+  /// Get all devices (both online and offline)
+  Future<List<SignikDevice>> getAllDevices({DeviceType? deviceType}) async {
+    if (_brokerService != null) {
+      return await _brokerService!.getDevices(deviceType: deviceType);
+    }
+    return [];
+  }
+
+  /// Connect to another device
+  Future<String> connectToDevice(String targetDeviceId) async {
+    if (_brokerService == null) {
+      throw Exception('Not connected to broker');
+    }
+    return await _brokerService!.connectToDevice(targetDeviceId);
+  }
+
+  /// Get connections for this device
+  Future<List<DeviceConnection>> getMyConnections() async {
+    if (_brokerService == null) {
+      throw Exception('Not connected to broker');
+    }
+    return await _brokerService!.getMyConnections();
+  }
+
+  /// Update connection status
+  Future<void> updateConnectionStatus(String connectionId, ConnectionStatus status) async {
+    if (_brokerService == null) {
+      throw Exception('Not connected to broker');
+    }
+    await _brokerService!.updateConnectionStatus(connectionId, status);
   }
 
   Future<String> enqueueDocument(String name, {List<int>? pdfData}) async {

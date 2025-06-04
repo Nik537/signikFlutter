@@ -30,6 +30,12 @@ class DocStatus(str, Enum):
     DEFERRED = "deferred"
     DELIVERED = "delivered"
 
+class ConnectionStatus(str, Enum):
+    PENDING = "pending"
+    CONNECTED = "connected"
+    DISCONNECTED = "disconnected"
+    REJECTED = "rejected"
+
 class Device(BaseModel):
     id: str
     name: str
@@ -37,6 +43,15 @@ class Device(BaseModel):
     ip_address: str
     last_heartbeat: datetime
     is_online: bool = True
+
+class DeviceConnection(BaseModel):
+    id: str
+    windows_device_id: str
+    android_device_id: str
+    status: ConnectionStatus
+    created_at: datetime
+    updated_at: datetime
+    initiated_by: str  # device_id that initiated the connection
 
 class Document(BaseModel):
     id: str
@@ -67,24 +82,47 @@ class EnqueueDocRequest(BaseModel):
     windows_device_id: str
     pdf_data: Optional[str] = None  # Base64 encoded
 
+class ConnectDeviceRequest(BaseModel):
+    target_device_id: str
+
+class UpdateConnectionRequest(BaseModel):
+    status: ConnectionStatus
+
 # In-memory storage (will be replaced with proper DB later)
 devices: Dict[str, Device] = {}
 documents: Dict[str, Document] = {}
+device_connections: Dict[str, DeviceConnection] = {}
 connections: Dict[str, WebSocket] = {}
 last_target_device: Optional[str] = None  # Track the last selected device for binary routing
 
 @app.post("/register_device")
 async def register_device(request: RegisterDeviceRequest):
-    device_id = str(uuid.uuid4())
-    device = Device(
-        id=device_id,
-        name=request.device_name,
-        device_type=request.device_type,
-        ip_address=request.ip_address,
-        last_heartbeat=datetime.now()
-    )
-    devices[device_id] = device
-    return {"device_id": device_id, "message": "Device registered successfully"}
+    # Check if a device with the same name and type already exists
+    existing_device = None
+    for device in devices.values():
+        if (device.name == request.device_name and 
+            device.device_type == request.device_type):
+            existing_device = device
+            break
+    
+    if existing_device:
+        # Update existing device info and mark as online
+        existing_device.ip_address = request.ip_address
+        existing_device.last_heartbeat = datetime.now()
+        existing_device.is_online = True
+        return {"device_id": existing_device.id, "message": "Device updated successfully"}
+    else:
+        # Create new device
+        device_id = str(uuid.uuid4())
+        device = Device(
+            id=device_id,
+            name=request.device_name,
+            device_type=request.device_type,
+            ip_address=request.ip_address,
+            last_heartbeat=datetime.now()
+        )
+        devices[device_id] = device
+        return {"device_id": device_id, "message": "Device registered successfully"}
 
 @app.post("/enqueue_doc")
 async def enqueue_document(request: EnqueueDocRequest):
@@ -114,6 +152,15 @@ async def enqueue_document(request: EnqueueDocRequest):
 @app.get("/devices")
 async def get_devices(device_type: Optional[DeviceType] = None):
     filtered_devices = devices.values()
+    if device_type:
+        filtered_devices = [d for d in filtered_devices if d.device_type == device_type]
+    
+    return {"devices": [d.dict() for d in filtered_devices]}
+
+@app.get("/devices/online")
+async def get_online_devices(device_type: Optional[DeviceType] = None):
+    """Get only online devices - useful for target device selection"""
+    filtered_devices = [d for d in devices.values() if d.is_online]
     if device_type:
         filtered_devices = [d for d in filtered_devices if d.device_type == device_type]
     
@@ -317,6 +364,137 @@ async def check_device_status():
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(check_device_status())
+
+@app.post("/devices/{device_id}/connect")
+async def connect_device(device_id: str, request: ConnectDeviceRequest):
+    """Initiate a connection between two devices"""
+    if device_id not in devices:
+        raise HTTPException(status_code=404, detail="Source device not found")
+    
+    if request.target_device_id not in devices:
+        raise HTTPException(status_code=404, detail="Target device not found")
+    
+    source_device = devices[device_id]
+    target_device = devices[request.target_device_id]
+    
+    # Ensure devices are of different types
+    if source_device.device_type == target_device.device_type:
+        raise HTTPException(status_code=400, detail="Cannot connect devices of the same type")
+    
+    # Check if connection already exists
+    for conn in device_connections.values():
+        if ((conn.windows_device_id == device_id and conn.android_device_id == request.target_device_id) or
+            (conn.android_device_id == device_id and conn.windows_device_id == request.target_device_id)):
+            raise HTTPException(status_code=400, detail="Connection already exists")
+    
+    # Create connection
+    connection_id = str(uuid.uuid4())
+    windows_id = device_id if source_device.device_type == DeviceType.WINDOWS else request.target_device_id
+    android_id = request.target_device_id if target_device.device_type == DeviceType.ANDROID else device_id
+    
+    connection = DeviceConnection(
+        id=connection_id,
+        windows_device_id=windows_id,
+        android_device_id=android_id,
+        status=ConnectionStatus.PENDING,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        initiated_by=device_id
+    )
+    device_connections[connection_id] = connection
+    
+    # Notify target device about connection request
+    if request.target_device_id in connections:
+        message = {
+            "type": "connectionRequest",
+            "connection_id": connection_id,
+            "from_device": source_device.dict()
+        }
+        await connections[request.target_device_id].send_text(json.dumps(message))
+    
+    return {"connection_id": connection_id, "message": "Connection request sent"}
+
+@app.get("/devices/{device_id}/connections")
+async def get_device_connections(device_id: str):
+    """Get all connections for a specific device"""
+    if device_id not in devices:
+        raise HTTPException(status_code=404, detail="Device not found")
+    
+    device_connections_list = []
+    for conn in device_connections.values():
+        if conn.windows_device_id == device_id or conn.android_device_id == device_id:
+            # Get the other device info
+            other_device_id = conn.android_device_id if conn.windows_device_id == device_id else conn.windows_device_id
+            other_device = devices.get(other_device_id)
+            
+            connection_info = conn.dict()
+            connection_info["other_device"] = other_device.dict() if other_device else None
+            device_connections_list.append(connection_info)
+    
+    return {"connections": device_connections_list}
+
+@app.put("/connections/{connection_id}")
+async def update_connection(connection_id: str, request: UpdateConnectionRequest):
+    """Update connection status (accept/reject/disconnect)"""
+    if connection_id not in device_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    connection = device_connections[connection_id]
+    connection.status = request.status
+    connection.updated_at = datetime.now()
+    
+    # Notify both devices about status change
+    message = {
+        "type": "connectionStatusUpdate",
+        "connection_id": connection_id,
+        "status": request.status.value
+    }
+    
+    for device_id in [connection.windows_device_id, connection.android_device_id]:
+        if device_id in connections:
+            await connections[device_id].send_text(json.dumps(message))
+    
+    return {"message": f"Connection status updated to {request.status.value}"}
+
+@app.get("/connections")
+async def get_all_connections(status: Optional[ConnectionStatus] = None):
+    """Get all device connections with optional status filter"""
+    filtered_connections = device_connections.values()
+    if status:
+        filtered_connections = [c for c in filtered_connections if c.status == status]
+    
+    connections_with_devices = []
+    for conn in filtered_connections:
+        windows_device = devices.get(conn.windows_device_id)
+        android_device = devices.get(conn.android_device_id)
+        
+        conn_info = conn.dict()
+        conn_info["windows_device"] = windows_device.dict() if windows_device else None
+        conn_info["android_device"] = android_device.dict() if android_device else None
+        connections_with_devices.append(conn_info)
+    
+    return {"connections": connections_with_devices}
+
+@app.delete("/connections/{connection_id}")
+async def delete_connection(connection_id: str):
+    """Remove a device connection"""
+    if connection_id not in device_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    connection = device_connections[connection_id]
+    
+    # Notify both devices about disconnection
+    message = {
+        "type": "connectionRemoved",
+        "connection_id": connection_id
+    }
+    
+    for device_id in [connection.windows_device_id, connection.android_device_id]:
+        if device_id in connections:
+            await connections[device_id].send_text(json.dumps(message))
+    
+    del device_connections[connection_id]
+    return {"message": "Connection removed successfully"}
 
 if __name__ == "__main__":
     import uvicorn

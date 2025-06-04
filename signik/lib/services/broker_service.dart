@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/signik_device.dart';
 import '../models/signik_document.dart';
+import '../models/device_connection.dart';
 
 class BrokerService {
   final String brokerUrl;
@@ -74,6 +75,25 @@ class BrokerService {
     }
   }
 
+  /// Get list of online devices only
+  Future<List<SignikDevice>> getOnlineDevices({DeviceType? deviceType}) async {
+    String url = '$brokerUrl/devices/online';
+    if (deviceType != null) {
+      final typeStr = deviceType == DeviceType.windows ? 'windows' : 'android';
+      url += '?device_type=$typeStr';
+    }
+
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final List<dynamic> devicesJson = data['devices'];
+      return devicesJson.map((json) => SignikDevice.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to get online devices: ${response.body}');
+    }
+  }
+
   /// Enqueue a document for signing
   Future<String> enqueueDocument(String name, String windowsDeviceId, {List<int>? pdfData}) async {
     final response = await http.post(
@@ -110,6 +130,80 @@ class BrokerService {
       return documentsJson.map((json) => SignikDocument.fromJson(json)).toList();
     } else {
       throw Exception('Failed to get documents: ${response.body}');
+    }
+  }
+
+  /// Connect to another device
+  Future<String> connectToDevice(String targetDeviceId) async {
+    if (_deviceId == null) {
+      throw Exception('Device not registered');
+    }
+
+    final response = await http.post(
+      Uri.parse('$brokerUrl/devices/$_deviceId/connect'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'target_device_id': targetDeviceId,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['connection_id'];
+    } else {
+      throw Exception('Failed to connect to device: ${response.body}');
+    }
+  }
+
+  /// Get connections for this device
+  Future<List<DeviceConnection>> getMyConnections() async {
+    if (_deviceId == null) {
+      throw Exception('Device not registered');
+    }
+
+    final response = await http.get(
+      Uri.parse('$brokerUrl/devices/$_deviceId/connections'),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final List<dynamic> connectionsJson = data['connections'];
+      return connectionsJson.map((json) => DeviceConnection.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to get connections: ${response.body}');
+    }
+  }
+
+  /// Update connection status
+  Future<void> updateConnectionStatus(String connectionId, ConnectionStatus status) async {
+    final response = await http.put(
+      Uri.parse('$brokerUrl/connections/$connectionId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'status': _connectionStatusToString(status),
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update connection status: ${response.body}');
+    }
+  }
+
+  /// Get all connections (admin function)
+  Future<List<DeviceConnection>> getAllConnections({ConnectionStatus? status}) async {
+    String url = '$brokerUrl/connections';
+    if (status != null) {
+      url += '?status=${_connectionStatusToString(status)}';
+    }
+
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final List<dynamic> connectionsJson = data['connections'];
+      return connectionsJson.map((json) => DeviceConnection.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to get all connections: ${response.body}');
     }
   }
 
@@ -153,6 +247,19 @@ class BrokerService {
         return 'delivered';
       default:
         return 'error';
+    }
+  }
+
+  String _connectionStatusToString(ConnectionStatus status) {
+    switch (status) {
+      case ConnectionStatus.pending:
+        return 'pending';
+      case ConnectionStatus.connected:
+        return 'connected';
+      case ConnectionStatus.rejected:
+        return 'rejected';
+      case ConnectionStatus.disconnected:
+        return 'disconnected';
     }
   }
 } 
