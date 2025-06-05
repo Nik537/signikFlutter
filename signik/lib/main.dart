@@ -21,4 +21,4 @@ class SignikApp extends StatelessWidget {
       home: Platform.isWindows ? const WindowsHome() : const AndroidHome(),
     );
   }
-}ean up -
+}
