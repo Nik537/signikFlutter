@@ -134,3 +134,35 @@ pending → connected → disconnected
 3. Use broker API docs for debugging
 4. Test with simulation scripts before real devices
 5. Check heartbeat logs for connection issues
+
+## Refactored Code Structure
+
+### Python Broker (`signik_broker/`)
+The broker has been refactored into modular components:
+- **models.py**: All Pydantic models and enums
+- **storage.py**: In-memory storage manager with async operations
+- **websocket_manager.py**: WebSocket connection and message routing
+- **api_routes.py**: API endpoint handlers
+- **main.py**: FastAPI app setup and configuration
+
+### Flutter Services (`signik/lib/services/`)
+Services have been refactored for better separation of concerns:
+- **api/**: HTTP API clients separated by domain (device_api.dart, document_api.dart)
+- **websocket/**: Separate WebSocket client and server implementations
+- **broker_service_refactored.dart**: Cleaner broker service with proper error handling
+- **connection_manager_refactored.dart**: Improved connection management with streams
+
+### Flutter UI Components (`signik/lib/ui/`)
+UI has been modularized with reusable components:
+- **base/**: Base classes for common functionality
+- **components/**: Reusable UI widgets (ConnectionStatusWidget, PdfDropZone, DeviceListWidget)
+- **windows/home_refactored.dart**: Cleaner Windows UI using composition
+
+### Key Improvements
+1. **Better Error Handling**: Custom exceptions and proper error propagation
+2. **Async Operations**: Proper use of async/await throughout
+3. **Type Safety**: Improved type hints and model validation
+4. **Modularity**: Clear separation of concerns with single responsibility
+5. **Reusability**: Common UI components extracted for reuse
+6. **Logging**: Structured logging in Python broker
+7. **Connection Management**: Automatic reconnection and state management
