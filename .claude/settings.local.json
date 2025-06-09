@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cmd.exe:*)"
+      "Bash(cmd.exe:*)",
+      "Bash(gradlew clean:*)",
+      "Bash(./gradlew:*)",
+      "Bash(rm:*)",
+      "Bash(flutter:*)"
     ],
     "deny": []
   }
