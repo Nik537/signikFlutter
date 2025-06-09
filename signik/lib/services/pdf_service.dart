@@ -18,7 +18,7 @@ class PdfService {
     final PdfBitmap signature = PdfBitmap(signatureBytes);
     
     // Calculate signature position and scale down
-    final double scale = 0.28; // 28% of original size
+    final double scale = 0.1; // 10% of original size
     final double signatureWidth = signature.width.toDouble() * scale;
     final double signatureHeight = signature.height.toDouble() * scale;
     const double margin = 77.0; // margin from the edges in points
@@ -41,10 +41,16 @@ class PdfService {
   SignikDocument createSignedDocument(String originalPath) {
     final dir = originalPath.substring(0, originalPath.lastIndexOf('/'));
     final name = originalPath.split('/').last;
+    final now = DateTime.now();
+    final id = '${name}_${now.millisecondsSinceEpoch}';
+    
     return SignikDocument(
+      id: id,
       name: name,
       path: originalPath,
       status: SignikDocumentStatus.signed,
+      createdAt: now,
+      updatedAt: now,
     );
   }
 } 
