@@ -43,6 +43,37 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
     
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 2,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Back',
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.device_hub, size: 24),
+            SizedBox(width: 12),
+            Text('Device Connection Manager'),
+          ],
+        ),
+        actions: [
+          // Save Button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: ElevatedButton.icon(
+              onPressed: _saveConnections,
+              icon: const Icon(Icons.save),
+              label: const Text('Save Changes'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0066CC),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
       body: Row(
         children: [
           // Left Sidebar - PC List
@@ -199,38 +230,25 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
                     children: [
                       Icon(Icons.android, color: Colors.green.shade600, size: 24),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Android Device Connections',
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Android Device Connections',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (_selectedPcId != null)
+                            Text(
+                              'Managing connections for: ${_connectionManager.devices.firstWhere((d) => d.id == _selectedPcId).name}',
                               style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
                               ),
                             ),
-                            if (_selectedPcId != null)
-                              Text(
-                                'Managing connections for: ${_connectionManager.devices.firstWhere((d) => d.id == _selectedPcId).name}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      // Save Button
-                      ElevatedButton.icon(
-                        onPressed: _saveConnections,
-                        icon: const Icon(Icons.save),
-                        label: const Text('Save Changes'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0066CC),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        ),
+                        ],
                       ),
                     ],
                   ),
