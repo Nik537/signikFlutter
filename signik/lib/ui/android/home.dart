@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:signature/signature.dart';
 import '../../services/connection_manager.dart' as cm;
 import '../../services/app_config.dart';
@@ -16,7 +17,7 @@ class AndroidHome extends StatefulWidget {
 }
 
 class _AndroidHomeState extends State<AndroidHome> {
-  final cm.ConnectionManager _connectionManager = cm.ConnectionManager();
+  late cm.ConnectionManager _connectionManager;
   final SignatureController _signatureController = SignatureController(
     penStrokeWidth: 2,
     penColor: Colors.black,
@@ -30,6 +31,7 @@ class _AndroidHomeState extends State<AndroidHome> {
   String? _currentDocId;
   bool _isSigned = false;
   bool _expectingPdf = false;
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -38,16 +40,51 @@ class _AndroidHomeState extends State<AndroidHome> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    _connectToBroker();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeConnection();
+    });
   }
 
-  Future<void> _connectToBroker() async {
+  Future<void> _initializeConnection() async {
+    _connectionManager = Provider.of<cm.ConnectionManager>(context, listen: false);
+    
+    // Always set up listeners first
+    _setupListeners();
+    
+    // Check if already connected
+    if (_connectionManager.isConnected) {
+      setState(() {
+        _isConnected = true;
+        _status = 'Connected to broker. Waiting for PDF...';
+        _isInitialized = true;
+      });
+      // Start device refresh if not already started
+      _connectionManager.startDeviceRefresh();
+      return;
+    }
+    
+    // Connect if not already connected
     setState(() => _status = 'Connecting to broker...');
     try {
       await _connectionManager.connect(deviceName: 'Signik Android Tablet');
-      
-      // Listen to connection state
-      _connectionManager.connectionState.listen((state) {
+      // Start device refresh
+      _connectionManager.startDeviceRefresh();
+      setState(() {
+        _isInitialized = true;
+      });
+    } catch (e) {
+      setState(() {
+        _isConnected = false;
+        _status = 'Connection failed: $e';
+        _isInitialized = true;
+      });
+    }
+  }
+  
+  void _setupListeners() {
+    // Listen to connection state
+    _connectionManager.connectionState.listen((state) {
+      if (mounted) {
         setState(() {
           _isConnected = state == cm.ConnectionState.connected;
           switch (state) {
@@ -67,28 +104,23 @@ class _AndroidHomeState extends State<AndroidHome> {
               break;
           }
         });
-      });
-      
-      // Listen to messages
-      _connectionManager.messages.listen(_handleMessage);
-      
-      // Listen to raw data (PDF bytes)
-      _connectionManager.rawData.listen((data) {
-        if (_expectingPdf) {
-          setState(() {
-            _pdfBytes = data;
-            _status = 'PDF received. Ready to sign.';
-            _isSigned = false;
-            _expectingPdf = false;
-          });
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _isConnected = false;
-        _status = 'Connection failed: $e';
-      });
-    }
+      }
+    });
+    
+    // Listen to messages
+    _connectionManager.messages.listen(_handleMessage);
+    
+    // Listen to raw data (PDF bytes)
+    _connectionManager.rawData.listen((data) {
+      if (_expectingPdf && mounted) {
+        setState(() {
+          _pdfBytes = data;
+          _status = 'PDF received. Ready to sign.';
+          _isSigned = false;
+          _expectingPdf = false;
+        });
+      }
+    });
   }
 
   void _handleMessage(SignikMessage msg) {
@@ -148,18 +180,32 @@ class _AndroidHomeState extends State<AndroidHome> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Signik - Android'),
-        actions: [
-          Icon(
-            _isConnected ? Icons.hub : Icons.hub_outlined,
-            color: _isConnected ? Colors.green : Colors.grey,
+    return Consumer<cm.ConnectionManager>(
+      builder: (context, connectionManager, child) {
+        // Update connection state based on provider
+        if (_isInitialized && connectionManager.isConnected != _isConnected) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            setState(() {
+              _isConnected = connectionManager.isConnected;
+              if (_isConnected) {
+                _status = 'Connected to broker. Waiting for PDF...';
+              }
+            });
+          });
+        }
+        
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Signik - Android'),
+            actions: [
+              Icon(
+                _isConnected ? Icons.hub : Icons.hub_outlined,
+                color: _isConnected ? Colors.green : Colors.grey,
+              ),
+              const SizedBox(width: 16),
+            ],
           ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: Column(
+          body: Column(
         children: [
           StatusPanel(status: _status, connected: _isConnected),
           if (_pdfBytes != null) ...[
@@ -213,20 +259,26 @@ class _AndroidHomeState extends State<AndroidHome> {
                 ],
               ),
             ),
-          ] else if (!_isConnected)
+          ] else if (!_isInitialized)
+            const Expanded(
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (!_isConnected)
             Expanded(
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const CircularProgressIndicator(),
+                    const Icon(Icons.cloud_off, size: 64, color: Colors.red),
                     const SizedBox(height: 16),
-                    Text('Connecting to broker...', style: Theme.of(context).textTheme.headlineSmall),
+                    Text('Not connected to broker', style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 8),
                     Text('Broker: ${AppConfig.brokerUrl}', style: Theme.of(context).textTheme.bodyLarge),
                     const SizedBox(height: 24),
                     ElevatedButton(
-                      onPressed: _connectToBroker,
+                      onPressed: _initializeConnection,
                       child: const Text('Retry Connection'),
                     ),
                   ],
@@ -250,13 +302,15 @@ class _AndroidHomeState extends State<AndroidHome> {
             ),
         ],
       ),
-      floatingActionButton: _pdfBytes != null && !_isSigned
-          ? FloatingActionButton.extended(
-              onPressed: _sendSignature,
-              label: const Text('Send'),
-              icon: const Icon(Icons.send),
-            )
-          : null,
+          floatingActionButton: _pdfBytes != null && !_isSigned
+              ? FloatingActionButton.extended(
+                  onPressed: _sendSignature,
+                  label: const Text('Send'),
+                  icon: const Icon(Icons.send),
+                )
+              : null,
+        );
+      },
     );
   }
 
@@ -268,7 +322,6 @@ class _AndroidHomeState extends State<AndroidHome> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    _connectionManager.dispose();
     _signatureController.dispose();
     super.dispose();
   }
