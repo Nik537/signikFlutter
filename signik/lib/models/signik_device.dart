@@ -1,3 +1,4 @@
+/// Represents the type of device in the Signik system
 enum DeviceType {
   windows,
   android,
@@ -20,14 +21,14 @@ class SignikDevice {
     this.isOnline = true,
   });
   
-  // Convenience getter
-  String get type => _deviceTypeToString(deviceType);
+  /// Convenience getter for device type as string
+  String get type => deviceType.name;
 
   factory SignikDevice.fromJson(Map<String, dynamic> json) {
     return SignikDevice(
       id: json['id'] as String,
       name: json['name'] as String,
-      deviceType: _deviceTypeFromString(json['device_type'] as String),
+      deviceType: DeviceType.values.byName(json['device_type'] as String? ?? 'android'),
       ipAddress: json['ip_address'] as String?,
       lastHeartbeat: DateTime.parse(json['last_heartbeat'] as String),
       isOnline: json['is_online'] as bool? ?? true,
@@ -38,32 +39,13 @@ class SignikDevice {
     return {
       'id': id,
       'name': name,
-      'device_type': _deviceTypeToString(deviceType),
+      'device_type': deviceType.name,
       'ip_address': ipAddress,
       'last_heartbeat': lastHeartbeat.toIso8601String(),
       'is_online': isOnline,
     };
   }
 
-  static DeviceType _deviceTypeFromString(String type) {
-    switch (type) {
-      case 'windows':
-        return DeviceType.windows;
-      case 'android':
-        return DeviceType.android;
-      default:
-        return DeviceType.android;
-    }
-  }
-
-  static String _deviceTypeToString(DeviceType type) {
-    switch (type) {
-      case DeviceType.windows:
-        return 'windows';
-      case DeviceType.android:
-        return 'android';
-    }
-  }
 
   SignikDevice copyWith({
     String? id,

@@ -5,6 +5,8 @@ import 'services/connection_manager.dart';
 import 'services/app_config.dart';
 import 'ui/windows/home.dart';
 import 'ui/android/home.dart';
+import 'core/theme/app_theme.dart';
+import 'core/constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,10 +28,10 @@ class SignikApp extends StatelessWidget {
       create: (_) => ConnectionManager(),
       child: MaterialApp(
         title: 'Signik',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
-        ),
+        theme: AppTheme.lightTheme(),
+        darkTheme: AppTheme.darkTheme(),
+        themeMode: ThemeMode.light,
+        debugShowCheckedModeBanner: false,
         home: Platform.isWindows ? const WindowsHome() : const AndroidHome(),
       ),
     );
