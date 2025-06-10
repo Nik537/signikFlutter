@@ -120,47 +120,177 @@ class _SidebarWithTabsState extends State<SidebarWithTabs> with SingleTickerProv
   }
 
   Widget _buildConnectionsTab() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.device_hub,
-              size: 64,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Manage Device Connections',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Configure which Android devices each PC can send documents to',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
+    final currentPcId = _connectionManager.deviceId;
+    if (currentPcId == null) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    final connectedDeviceIds = widget.connectionsService.getConnectedDevices(currentPcId);
+    final connectedDevices = _connectionManager.devices
+        .where((d) => d.type == 'android' && d.isOnline && connectedDeviceIds.contains(d.id))
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Connected Devices',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
+              const SizedBox(height: 4),
+              Text(
+                'Android devices that can receive PDFs',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Connected devices list
+        Expanded(
+          child: connectedDevices.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.tablet_android, size: 48, color: Colors.grey.shade300),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No connected devices',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Add devices in the connection manager',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: connectedDevices.length,
+                  itemBuilder: (context, index) {
+                    final device = connectedDevices[index];
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFF0066CC),
+                          child: Icon(
+                            Icons.tablet_android,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        title: Text(
+                          device.name,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Row(
+                          children: [
+                            const Icon(
+                              Icons.circle,
+                              size: 8,
+                              color: Colors.green,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              device.ipAddress ?? 'No IP',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.speed, size: 18),
+                          color: const Color(0xFF0066CC),
+                          tooltip: 'Test Connection',
+                          onPressed: () => _testConnection(device),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        // Connection Manager Button
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
               onPressed: _openDeviceConnectionsScreen,
               icon: const Icon(Icons.settings),
               label: const Text('Open Connection Manager'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0066CC),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                textStyle: const TextStyle(fontSize: 16),
+                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
-          ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Future<void> _testConnection(SignikDevice device) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Testing connection...'),
+              ],
+            ),
+          ),
         ),
       ),
     );
+
+    try {
+      await _connectionManager.testDeviceConnection(device.id);
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Connection to ${device.name} successful!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Connection to ${device.name} failed'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
   
   void _openDeviceConnectionsScreen() async {
