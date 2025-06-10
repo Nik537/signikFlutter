@@ -8,6 +8,7 @@ import '../../services/app_config.dart';
 import '../../models/signik_message.dart';
 import '../../widgets/status_panel.dart';
 import '../../widgets/pdf_viewer.dart';
+import 'settings_screen.dart';
 
 class AndroidHome extends StatefulWidget {
   const AndroidHome({super.key});
@@ -66,7 +67,12 @@ class _AndroidHomeState extends State<AndroidHome> {
     // Connect if not already connected
     setState(() => _status = 'Connecting to broker...');
     try {
-      await _connectionManager.connect(deviceName: 'Signik Android Tablet');
+      // Use saved device name or default
+      final deviceName = AppConfig.deviceName.isNotEmpty 
+          ? AppConfig.deviceName 
+          : 'Signik Android Tablet';
+      
+      await _connectionManager.connect(deviceName: deviceName);
       // Start device refresh
       _connectionManager.startDeviceRefresh();
       setState(() {
@@ -204,6 +210,35 @@ class _AndroidHomeState extends State<AndroidHome> {
           appBar: AppBar(
             title: const Text('Signik - Android'),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsScreen(),
+                    ),
+                  );
+                  
+                  // If settings were changed, show restart reminder
+                  if (result == true && mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Restart Required'),
+                        content: const Text('Please restart the app for the new settings to take effect.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('OK'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+                tooltip: 'Settings',
+              ),
               Icon(
                 _isConnected ? Icons.hub : Icons.hub_outlined,
                 color: _isConnected ? Colors.green : Colors.grey,

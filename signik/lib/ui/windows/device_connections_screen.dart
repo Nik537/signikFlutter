@@ -272,24 +272,26 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
                     children: [
                       Icon(Icons.android, color: Colors.green.shade600, size: 24),
                       const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Android Device Connections',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Android Device Connections',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                          Text(
-                            'Configure which Android devices can receive PDFs',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
+                            Text(
+                              'Configure which Android devices can receive PDFs',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -313,30 +315,63 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
       );
     }
     
+    // Only show online Android devices
     final androidDevices = _connectionManager.devices
-        .where((d) => d.type == 'android')
+        .where((d) => d.type == 'android' && d.isOnline)
         .toList();
+    
+    // Sort by name
+    androidDevices.sort((a, b) => a.name.compareTo(b.name));
     
     final connectedDeviceIds = _connectionsService.getConnectedDevices(_selectedPcId!);
     
     return Container(
       color: const Color(0xFFF5F5F5),
       padding: const EdgeInsets.all(20),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 1.5,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-        ),
-        itemCount: androidDevices.length,
-        itemBuilder: (context, index) {
-          final device = androidDevices[index];
-          final isConnected = connectedDeviceIds.contains(device.id);
-          
-          return _buildDeviceCard(device, isConnected);
-        },
-      ),
+      child: androidDevices.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.tablet_android,
+                    size: 64,
+                    color: Colors.grey.shade300,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No online Android devices',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Make sure Android devices are connected to the broker',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                childAspectRatio: 1.5,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: androidDevices.length,
+              itemBuilder: (context, index) {
+                final device = androidDevices[index];
+                final isConnected = connectedDeviceIds.contains(device.id);
+                
+                return _buildDeviceCard(device, isConnected);
+              },
+            ),
     );
   }
 

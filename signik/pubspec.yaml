@@ -48,6 +48,7 @@ dependencies:
   qr_flutter: ^4.1.0
   http: ^1.1.0
   provider: ^6.0.5
+  shared_preferences: ^2.2.2
 
   # TODO: Add these packages later
   # firebase_storage: ^11.6.0

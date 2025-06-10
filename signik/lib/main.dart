@@ -2,10 +2,18 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:provider/provider.dart';
 import 'services/connection_manager.dart';
+import 'services/app_config.dart';
 import 'ui/windows/home.dart';
 import 'ui/android/home.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load saved settings for Android
+  if (Platform.isAndroid) {
+    await AppConfig.loadFromPreferences();
+  }
+  
   runApp(const SignikApp());
 }
 
