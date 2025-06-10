@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:provider/provider.dart';
+import 'services/connection_manager.dart';
 import 'ui/windows/home.dart';
 import 'ui/android/home.dart';
 
@@ -12,13 +14,16 @@ class SignikApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Signik',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+    return ChangeNotifierProvider(
+      create: (_) => ConnectionManager(),
+      child: MaterialApp(
+        title: 'Signik',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          useMaterial3: true,
+        ),
+        home: Platform.isWindows ? const WindowsHome() : const AndroidHome(),
       ),
-      home: Platform.isWindows ? const WindowsHome() : const AndroidHome(),
     );
   }
 }

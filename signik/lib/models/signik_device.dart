@@ -7,7 +7,7 @@ class SignikDevice {
   final String id;
   final String name;
   final DeviceType deviceType;
-  final String ipAddress;
+  final String? ipAddress;
   final DateTime lastHeartbeat;
   final bool isOnline;
 
@@ -15,17 +15,20 @@ class SignikDevice {
     required this.id,
     required this.name,
     required this.deviceType,
-    required this.ipAddress,
+    this.ipAddress,
     required this.lastHeartbeat,
     this.isOnline = true,
   });
+  
+  // Convenience getter
+  String get type => _deviceTypeToString(deviceType);
 
   factory SignikDevice.fromJson(Map<String, dynamic> json) {
     return SignikDevice(
       id: json['id'] as String,
       name: json['name'] as String,
       deviceType: _deviceTypeFromString(json['device_type'] as String),
-      ipAddress: json['ip_address'] as String,
+      ipAddress: json['ip_address'] as String?,
       lastHeartbeat: DateTime.parse(json['last_heartbeat'] as String),
       isOnline: json['is_online'] as bool? ?? true,
     );

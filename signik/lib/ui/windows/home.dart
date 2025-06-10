@@ -2,10 +2,12 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:provider/provider.dart';
 import '../../services/connection_manager.dart' as cm;
 import '../../services/file_service.dart';
 import '../../services/pdf_service.dart';
 import '../../services/app_config.dart';
+import '../../services/device_connections_service.dart';
 import '../../models/signik_document.dart';
 import '../../models/signik_message.dart';
 import '../../models/signik_device.dart';
@@ -13,6 +15,7 @@ import '../../widgets/status_panel.dart';
 import '../../widgets/signed_documents_list.dart';
 import '../../widgets/pdf_viewer.dart';
 import '../../widgets/device_selection_dialog.dart';
+import '../../widgets/sidebar_with_tabs.dart';
 
 class WindowsHome extends StatefulWidget {
   const WindowsHome({super.key});
@@ -21,10 +24,11 @@ class WindowsHome extends StatefulWidget {
   State<WindowsHome> createState() => _WindowsHomeState();
 }
 
-class _WindowsHomeState extends State<WindowsHome> {
-  final cm.ConnectionManager _connectionManager = cm.ConnectionManager();
+class _WindowsHomeState extends State<WindowsHome> with TickerProviderStateMixin {
+  late cm.ConnectionManager _connectionManager;
   late FileService _fileService;
   final PdfService _pdfService = PdfService();
+  DeviceConnectionsService? _connectionsService;
   bool _isConnected = false;
   bool _isDragging = false;
   String _status = 'Connecting to broker...';
@@ -33,23 +37,40 @@ class _WindowsHomeState extends State<WindowsHome> {
   String? _currentDocId;
   final List<SignikDocument> _signedDocuments = [];
   List<SignikDevice> _onlineDevices = [];
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeServices();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeServices();
+    });
   }
 
   Future<void> _initializeServices() async {
     try {
+      // Get connection manager from provider
+      _connectionManager = Provider.of<cm.ConnectionManager>(context, listen: false);
+      
       final documentsDir = Directory('${Platform.environment['USERPROFILE']}\\Documents');
       if (!await documentsDir.exists()) {
         await documentsDir.create(recursive: true);
       }
       _fileService = FileService(watchDirectory: documentsDir.path);
       
+      // Initialize device connections service
+      _connectionsService = DeviceConnectionsService();
+      await _connectionsService!.loadConnections();
+      
       // Connect to broker
       await _connectionManager.connect(deviceName: 'Signik Windows PC');
+      
+      // Start device refresh
+      _connectionManager.startDeviceRefresh();
+      
+      setState(() {
+        _isInitialized = true;
+      });
       
       // Listen to connection state
       _connectionManager.connectionState.listen((state) {
@@ -114,15 +135,48 @@ class _WindowsHomeState extends State<WindowsHome> {
       print('Error fetching devices: $e');
     }
   }
+  
+  List<SignikDevice> _getAvailableAndroidDevices() {
+    final currentPcId = _connectionManager.deviceId;
+    if (currentPcId == null) return [];
+    
+    final connectedDeviceIds = _connectionsService?.getConnectedDevices(currentPcId) ?? [];
+    return _onlineDevices.where((device) => 
+      device.deviceType == DeviceType.android && 
+      device.isOnline &&
+      connectedDeviceIds.contains(device.id)
+    ).toList();
+  }
 
   Future<void> _handleFileChanged(File file) async {
     // Refresh online devices
     await _refreshOnlineDevices();
     
-    final onlineAndroidDevices = _onlineDevices.where((d) => d.deviceType == DeviceType.android && d.isOnline).toList();
+    final availableAndroidDevices = _getAvailableAndroidDevices();
     
-    if (onlineAndroidDevices.isEmpty) {
-      setState(() => _status = 'No Android devices online');
+    if (availableAndroidDevices.isEmpty) {
+      setState(() => _status = 'No connected Android devices available. Check device connections.');
+      
+      // Offer to open device connections screen
+      final shouldOpenConnections = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('No Connected Devices'),
+          content: const Text('There are no Android devices connected to this PC. Would you like to manage device connections?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Manage Connections'),
+            ),
+          ],
+        ),
+      );
+      
+      // Device connections can now be managed in the sidebar tab
       return;
     }
     
@@ -140,15 +194,15 @@ class _WindowsHomeState extends State<WindowsHome> {
       // Show device selection dialog if multiple devices, or auto-select if only one
       SignikDevice? targetDevice;
       
-      if (onlineAndroidDevices.length == 1) {
-        targetDevice = onlineAndroidDevices.first;
+      if (availableAndroidDevices.length == 1) {
+        targetDevice = availableAndroidDevices.first;
       } else {
         // Show device selection dialog
         targetDevice = await showDialog<SignikDevice>(
           context: context,
           barrierDismissible: false,
           builder: (context) => DeviceSelectionDialog(
-            devices: onlineAndroidDevices,
+            devices: availableAndroidDevices,
             documentName: fileName,
           ),
         );
@@ -282,6 +336,7 @@ class _WindowsHomeState extends State<WindowsHome> {
       ),
     );
   }
+  
 
   @override
   Widget build(BuildContext context) {
@@ -370,28 +425,23 @@ class _WindowsHomeState extends State<WindowsHome> {
               ],
             ),
           ),
-          Container(
-            width: 320,
-            color: Colors.grey[50],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'Signed Documents',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                Expanded(
-                  child: SignedDocumentsList(
-                    documents: _signedDocuments,
-                    onOpen: _openDocument,
-                  ),
-                ),
-              ],
+          if (_isInitialized && _connectionsService != null)
+            Consumer<cm.ConnectionManager>(
+              builder: (context, connectionManager, _) => SidebarWithTabs(
+                signedDocuments: _signedDocuments,
+                onOpenDocument: _openDocument,
+                connectionsService: _connectionsService!,
+                onConnectionsChanged: _refreshOnlineDevices,
+              ),
+            )
+          else
+            Container(
+              width: 360,
+              color: Colors.grey[50],
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -399,8 +449,10 @@ class _WindowsHomeState extends State<WindowsHome> {
 
   @override
   void dispose() {
-    _connectionManager.dispose();
-    _fileService.dispose();
+    if (_isInitialized) {
+      _connectionManager.stopDeviceRefresh();
+      _fileService.dispose();
+    }
     super.dispose();
   }
 } 

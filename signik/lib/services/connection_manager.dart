@@ -9,7 +9,7 @@ import 'app_config.dart';
 import '../models/signik_device.dart';
 import '../models/signik_message.dart';
 
-class ConnectionManager {
+class ConnectionManager extends ChangeNotifier {
   WebSocketService? _webSocketService;
   BrokerService? _brokerService;
   HeartbeatService? _heartbeatService;
@@ -125,6 +125,71 @@ class ConnectionManager {
 
   void dispose() {
     disconnect();
+  }
+
+  // Test connection to a specific device
+  Future<void> testDeviceConnection(String deviceId) async {
+    try {
+      // Send a heartbeat message to the device (using heartbeat instead of ping)
+      final testMessage = SignikMessage(
+        type: SignikMessageType.heartbeat,
+        deviceId: deviceId,
+        data: {'timestamp': DateTime.now().toIso8601String()},
+      );
+      
+      await sendMessage(testMessage);
+      
+      // Wait for response (implement timeout logic if needed)
+      await Future.delayed(const Duration(seconds: 2));
+      
+      // For now, we'll assume success if no exception is thrown
+      // In a real implementation, you'd wait for a pong response
+    } catch (e) {
+      throw Exception('Connection test failed: $e');
+    }
+  }
+
+  // Get all devices (for device management UI)
+  List<SignikDevice> _devices = [];
+  List<SignikDevice> get devices => _devices;
+  SignikDevice? get currentDevice => _devices.firstWhere(
+    (d) => d.id == deviceId,
+    orElse: () => SignikDevice(
+      id: deviceId ?? '',
+      name: 'Current Device',
+      deviceType: Platform.isWindows ? DeviceType.windows : DeviceType.android,
+      lastHeartbeat: DateTime.now(),
+      isOnline: true,
+    ),
+  );
+  
+  // Periodically refresh device list
+  Timer? _deviceRefreshTimer;
+  
+  void startDeviceRefresh() {
+    _deviceRefreshTimer?.cancel();
+    _deviceRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      await refreshDevices();
+    });
+    // Initial refresh
+    refreshDevices();
+  }
+  
+  void stopDeviceRefresh() {
+    _deviceRefreshTimer?.cancel();
+  }
+  
+  Future<void> refreshDevices() async {
+    try {
+      if (_brokerService != null) {
+        // Get all devices (both Windows and Android)
+        final allDevices = await _brokerService!.getDevices();
+        _devices = allDevices;
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error refreshing devices: $e');
+    }
   }
 }
 
