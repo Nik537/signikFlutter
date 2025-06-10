@@ -125,6 +125,9 @@ class _AndroidHomeState extends State<AndroidHome> {
 
   void _handleMessage(SignikMessage msg) {
     if (msg.type == SignikMessageType.sendStart) {
+      // Clear signature pad for new document
+      _signatureController.clear();
+      
       setState(() {
         _currentFileName = msg.name;
         _currentDocId = msg.docId;
@@ -137,6 +140,9 @@ class _AndroidHomeState extends State<AndroidHome> {
     }
     
     if (msg.type == SignikMessageType.signatureAccepted) {
+      // Clear signature pad after acceptance
+      _signatureController.clear();
+      
       setState(() {
         _status = 'Signature accepted! Waiting for next PDF...';
         _pdfBytes = null;
