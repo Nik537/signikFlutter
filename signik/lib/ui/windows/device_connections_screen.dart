@@ -27,7 +27,21 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
   Future<void> _loadConnections() async {
     setState(() => _isLoading = true);
     await _connectionsService.loadConnections();
-    setState(() => _isLoading = false);
+    
+    // Auto-select the current PC
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final currentPcId = _connectionManager.deviceId;
+        if (currentPcId != null) {
+          setState(() {
+            _selectedPcId = currentPcId;
+            _isLoading = false;
+          });
+        } else {
+          setState(() => _isLoading = false);
+        }
+      }
+    });
   }
 
   Future<void> _saveConnections() async {
@@ -115,95 +129,123 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
                     ],
                   ),
                 ),
-                // PC List
+                // PC Info
                 Expanded(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(8),
-                          itemCount: _connectionManager.devices
-                              .where((d) => d.type == 'windows')
-                              .length,
-                          itemBuilder: (context, index) {
-                            final pcs = _connectionManager.devices
-                                .where((d) => d.type == 'windows')
-                                .toList();
-                            final pc = pcs[index];
-                            final isSelected = _selectedPcId == pc.id;
-                            
-                            return Card(
-                              elevation: isSelected ? 2 : 0,
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              color: isSelected ? const Color(0xFFE3F2FD) : Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(
-                                  color: isSelected 
-                                      ? const Color(0xFF0066CC) 
-                                      : Colors.grey.shade200,
-                                  width: isSelected ? 2 : 1,
+                      : Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Current PC',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey,
                                 ),
                               ),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: isSelected 
-                                      ? const Color(0xFF0066CC) 
-                                      : Colors.grey.shade300,
-                                  child: Icon(
-                                    Icons.desktop_windows,
-                                    color: isSelected ? Colors.white : Colors.grey.shade600,
-                                    size: 20,
-                                  ),
-                                ),
-                                title: Text(
-                                  pc.name,
-                                  style: TextStyle(
-                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                                    color: isSelected ? const Color(0xFF0066CC) : Colors.black87,
-                                  ),
-                                ),
-                                subtitle: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.circle,
-                                      size: 8,
-                                      color: pc.isOnline ? Colors.green : Colors.red,
+                              const SizedBox(height: 12),
+                              if (_connectionManager.currentDevice != null) ...[
+                                Card(
+                                  elevation: 2,
+                                  color: const Color(0xFFE3F2FD),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: const BorderSide(
+                                      color: Color(0xFF0066CC),
+                                      width: 2,
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      pc.ipAddress ?? 'No IP',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade600,
+                                  ),
+                                  child: ListTile(
+                                    leading: const CircleAvatar(
+                                      backgroundColor: Color(0xFF0066CC),
+                                      child: Icon(
+                                        Icons.desktop_windows,
+                                        color: Colors.white,
+                                        size: 20,
                                       ),
                                     ),
-                                  ],
-                                ),
-                                trailing: pc.id == _connectionManager.currentDevice?.id
-                                    ? Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.green.shade100,
-                                          borderRadius: BorderRadius.circular(12),
+                                    title: Text(
+                                      _connectionManager.currentDevice!.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF0066CC),
+                                      ),
+                                    ),
+                                    subtitle: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.circle,
+                                          size: 8,
+                                          color: Colors.green,
                                         ),
-                                        child: const Text(
-                                          'This PC',
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          _connectionManager.currentDevice!.ipAddress ?? 'No IP',
                                           style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.green,
-                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
                                           ),
                                         ),
-                                      )
-                                    : null,
-                                onTap: () {
-                                  setState(() {
-                                    _selectedPcId = pc.id;
-                                  });
-                                },
-                              ),
-                            );
-                          },
+                                      ],
+                                    ),
+                                    trailing: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade100,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Text(
+                                        'This PC',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  'Android Devices',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.blue.shade200),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Select Android devices that can receive PDFs from this PC',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.blue.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ] else
+                                const Center(
+                                  child: Text('Connecting to broker...'),
+                                ),
+                            ],
+                          ),
                         ),
                 ),
               ],
@@ -240,14 +282,13 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          if (_selectedPcId != null)
-                            Text(
-                              'Managing connections for: ${_connectionManager.devices.firstWhere((d) => d.id == _selectedPcId).name}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
+                          Text(
+                            'Configure which Android devices can receive PDFs',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
                             ),
+                          ),
                         ],
                       ),
                     ],
@@ -255,24 +296,7 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
                 ),
                 // Android Device Grid
                 Expanded(
-                  child: _selectedPcId == null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.touch_app, size: 64, color: Colors.grey.shade300),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Select a PC to manage its connections',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : _buildAndroidDeviceGrid(),
+                  child: _buildAndroidDeviceGrid(),
                 ),
               ],
             ),
@@ -283,6 +307,12 @@ class _DeviceConnectionsScreenState extends State<DeviceConnectionsScreen> {
   }
 
   Widget _buildAndroidDeviceGrid() {
+    if (_selectedPcId == null) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+    
     final androidDevices = _connectionManager.devices
         .where((d) => d.type == 'android')
         .toList();
