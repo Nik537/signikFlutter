@@ -36,12 +36,6 @@ class StatusPanel extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ConnectionStatusIndicator(
-            isConnected: connected,
-            size: 24,
-            showLabel: false,
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
