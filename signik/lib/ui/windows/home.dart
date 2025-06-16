@@ -16,6 +16,8 @@ import '../../widgets/signed_documents_list.dart';
 import '../../widgets/pdf_viewer.dart';
 import '../../widgets/device_selection_dialog.dart';
 import '../../widgets/sidebar_with_tabs.dart';
+import '../../services/email_service.dart';
+import '../../services/app_config.dart';
 
 class WindowsHome extends StatefulWidget {
   const WindowsHome({super.key});
@@ -28,6 +30,7 @@ class _WindowsHomeState extends State<WindowsHome> with TickerProviderStateMixin
   late cm.ConnectionManager _connectionManager;
   late FileService _fileService;
   final PdfService _pdfService = PdfService();
+  final EmailService _emailService = EmailService();
   DeviceConnectionsService? _connectionsService;
   bool _isConnected = false;
   bool _isDragging = false;
@@ -49,6 +52,9 @@ class _WindowsHomeState extends State<WindowsHome> with TickerProviderStateMixin
 
   Future<void> _initializeServices() async {
     try {
+      // Load app configuration including email settings
+      await AppConfig.loadFromPreferences();
+      
       // Get connection manager from provider
       _connectionManager = Provider.of<cm.ConnectionManager>(context, listen: false);
       
@@ -298,7 +304,20 @@ class _WindowsHomeState extends State<WindowsHome> with TickerProviderStateMixin
             await _connectionManager.sendMessage(completeMsg);
             await _connectionManager.sendRawData(signedPdfBytes);
             
-            setState(() => _status = 'PDF signed and saved');
+            setState(() => _status = 'PDF signed and saved. Sending email...');
+            
+            // Send email with signed document
+            try {
+              await _emailService.sendSignedDocument(
+                documentName: signedPath.split(Platform.pathSeparator).last,
+                pdfBytes: signedPdfBytes,
+              );
+              setState(() => _status = 'PDF signed, saved, and emailed to lolcat774@gmail.com');
+            } catch (emailError) {
+              setState(() => _status = 'PDF signed and saved. Email failed: $emailError');
+              // Log error but don't fail the entire operation
+              print('Email error: $emailError');
+            }
           } catch (e) {
             setState(() => _status = 'Error embedding signature: $e');
           }
