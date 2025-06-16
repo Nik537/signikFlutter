@@ -110,10 +110,19 @@ class FileService {
 
   /// Get path for signed version of PDF
   String getSignedPath(String originalPath) {
-    final dir = path.dirname(originalPath);
+    // Get the SignikSignedDocuments path
+    final documentsPath = Platform.environment['USERPROFILE'] ?? '';
+    final signikOutputPath = path.join(documentsPath, 'Documents', 'SignikSignedDocuments');
+    
+    // Ensure output directory exists
+    final outputDir = Directory(signikOutputPath);
+    if (!outputDir.existsSync()) {
+      outputDir.createSync(recursive: true);
+    }
+    
     final name = path.basenameWithoutExtension(originalPath);
     final ext = path.extension(originalPath);
-    return path.join(dir, '$name${AppConstants.signedSuffix}$ext');
+    return path.join(signikOutputPath, '$name${AppConstants.signedSuffix}$ext');
   }
 
   /// Dispose of resources

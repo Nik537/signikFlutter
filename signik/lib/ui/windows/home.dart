@@ -58,11 +58,17 @@ class _WindowsHomeState extends State<WindowsHome> with TickerProviderStateMixin
       // Get connection manager from provider
       _connectionManager = Provider.of<cm.ConnectionManager>(context, listen: false);
       
-      final documentsDir = Directory('${Platform.environment['USERPROFILE']}\\Documents');
-      if (!await documentsDir.exists()) {
-        await documentsDir.create(recursive: true);
+      // Create SignikHotFolder in Documents
+      final documentsPath = '${Platform.environment['USERPROFILE']}\\Documents';
+      final signikHotFolderPath = '$documentsPath\\SignikHotFolder';
+      final signikHotFolderDir = Directory(signikHotFolderPath);
+      
+      if (!await signikHotFolderDir.exists()) {
+        await signikHotFolderDir.create(recursive: true);
+        print('Created SignikHotFolder at: $signikHotFolderPath');
       }
-      _fileService = FileService(watchDirectory: documentsDir.path);
+      
+      _fileService = FileService(watchDirectory: signikHotFolderPath);
       
       // Initialize device connections service
       _connectionsService = DeviceConnectionsService();
@@ -434,6 +440,19 @@ class _WindowsHomeState extends State<WindowsHome> with TickerProviderStateMixin
                             Text(
                               _status,
                               style: Theme.of(context).textTheme.bodyLarge,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Hot folder: %USERPROFILE%\\Documents\\SignikHotFolder',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            Text(
+                              'Signed PDFs: %USERPROFILE%\\Documents\\SignikSignedDocuments',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey[600],
+                              ),
                             ),
                           ],
                         ),
